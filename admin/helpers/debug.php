@@ -9,6 +9,8 @@
 // No direct access.
 defined('_JEXEC') or die;
 
+use Joomla\String\StringHelper;
+
 /**
  * Users component debugging helper.
  *
@@ -51,6 +53,7 @@ class UsersHelperDebug
 				// Translate component name
 				$item->text = JText::_($item->text);
 			}
+			unset($item);  // unset the variable reference to avoid trouble if variable is reused, thus overwritting last pointed variable
 
 			// Sort by component name
 			JArrayHelper::sortObjects($items, 'text', 1, true, $lang->getLocale());
@@ -79,10 +82,11 @@ class UsersHelperDebug
 				foreach($component_actions as &$action)
 				{
 					echo $action->name . " -- ";
-					if ( JString::substr( $action->name , 0 , 5) != 'core.' ) continue;
+					if ( StringHelper::substr( $action->name , 0 , 5) != 'core.' ) continue;
 					$action_title = str_replace('core.', '', $action->name); //$action->title;
 					$actions[$action_title] = array($action->name, $action->description);
 				}
+				unset($action);  // unset the variable reference to avoid trouble if variable is reused, thus overwritting last pointed variable
 			}
 		}
 

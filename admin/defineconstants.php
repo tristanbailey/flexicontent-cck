@@ -21,8 +21,7 @@ defined( '_JEXEC' ) or die( 'Restricted access' );
 
 // Make sure that Joomla error reporting is used (some plugin may have turned it OFF)
 // Also make some changes e.g. disable E_STRICT for maximum and leave it on only for development
-$config = new JConfig();
-switch ($config->error_reporting)
+switch ( JFactory::getConfig()->get('error_reporting') )
 {
 	case 'default':
 	case '-1':
@@ -49,89 +48,37 @@ switch ($config->error_reporting)
 		break;
 	
 	default:
-		error_reporting($config->error_reporting);
+		error_reporting( JFactory::getConfig()->get('error_reporting') );
 		ini_set('display_errors', 1);
 		break;
 }
 
 // Joomla version variables
-if (!defined('FLEXI_J16GE')) {
-	//define('FLEXI_J16GE' , 1 );
-	jimport( 'joomla.version' );  $jversion = new JVersion;
-	define('FLEXI_J16GE', version_compare( $jversion->getShortVersion(), '1.6.0', 'ge' ) );
-	define('FLEXI_J30GE', version_compare( $jversion->getShortVersion(), '3.0.0', 'ge' ) );
+if (!defined('FLEXI_J16GE') || !defined('FLEXI_J30GE'))
+{
+	jimport('cms.version.version');
+	$jversion = new JVersion;
+	
+	// J3.5.0+ added new CLASS: StringHelper, to fix name conflict with PHP7 String class, we need to define the StringHelper CLASS in the case of J3.4.x
+	if ( version_compare( $jversion->getShortVersion(), '3.5.0', 'lt' ) && !class_exists('Joomla\String\StringHelper') )
+	{
+		require_once('j34x_LE.php');
+	}
 }
+if (!defined('FLEXI_J16GE'))   define('FLEXI_J16GE', version_compare( $jversion->getShortVersion(), '1.6.0', 'ge' ) );
+if (!defined('FLEXI_J30GE'))   define('FLEXI_J30GE', version_compare( $jversion->getShortVersion(), '3.0.0', 'ge' ) );
 
 if (!defined('DS'))  define('DS',DIRECTORY_SEPARATOR);
 
-if ( !class_exists('JControllerLegacy') )
-{
-	jimport('joomla.application.component.controller');
-	class JControllerLegacy extends JController {}
-}
-
-if ( !class_exists('JModelLegacy') )
-{
-	jimport('joomla.application.component.model');
-	class JModelLegacy extends JModel {}
-}
-
-if ( !class_exists('JViewLegacy') )
-{
-	jimport('joomla.application.component.view');
-	class JViewLegacy extends JView {}
-}
-
-if( FLEXI_J30GE )
-{
-	class JParameter{
-		var $params = null;
-		
-		function __construct($string = ''){
-			if(is_array($string)){
-				$this->params = $string;
-			}else{
-				$this->setParams($string);
-			}
-		}
-		
-		function get($k, $v = null){
-			if(array_key_exists($k, $this->params)){
-				return $this->params[$k];
-			}else{
-				return $v;
-			}
-		}
-		
-		function set($k, $v){
-			$this->params[$k] = $v;
-		}
-		
-		function setParams($string = ''){
-			if(strlen(trim(($string))) > 0){
-				$data = json_decode($string, true);
-				$this->params = $data;
-			}
-			if (!$this->params) $this->params = array();
-		}
-		
-		function toString(){
-			return json_encode($this->params);
-		}
-		
-		function toArray(){
-			return $this->params;
-		}
-		
-		function toObject(){
-			return json_decode(json_encode($this->params));
-		}
-	}
-}
+if ( !class_exists('JControllerLegacy') )  jimport('legacy.controller.legacy');
+if ( !class_exists('JModelLegacy') )       jimport('legacy.model.legacy');
+if ( !class_exists('JViewLegacy') )        jimport('legacy.view.legacy');
 
 // Set a default timezone if web server provider has not done so
-if ( ini_get('date.timezone')=='' && version_compare(PHP_VERSION, '5.1.0', '>'))
+// phpversion() should be used instead of PHP_VERSION, if not inside Joomla code
+if ( ini_get('date.timezone')=='' && version_compare(PHP_VERSION, '5.1.0', '>')) {
 	date_default_timezone_set('UTC');
+}
 
 // Set file manager paths
 $params = JComponentHelper::getParams('com_flexicontent');
@@ -167,7 +114,6 @@ if (!FLEXI_J16GE) {
 if (!defined('FLEXI_ACCESS'))  define('FLEXI_ACCESS'	, (JPluginHelper::isEnabled('system', 'flexiaccess') && version_compare(PHP_VERSION, '5.0.0', '>')) ? 1 : 0);
 if (!defined('FLEXI_CACHE'))   define('FLEXI_CACHE'		, $params->get('advcache', 1));
 if (!defined('FLEXI_CACHE_TIME'))	define('FLEXI_CACHE_TIME'	, $params->get('advcache_time', 3600));
-if (!defined('FLEXI_GC'))      define('FLEXI_GC'			, $params->get('purge_gc', 1));
 if (!defined('FLEXI_FISH'))    define('FLEXI_FISH'		, ($params->get('flexi_fish', 0) && (JPluginHelper::isEnabled('system', FLEXI_J16GE ? 'falangdriver' : 'jfdatabase' ))) ? 1 : 0);
 if ( FLEXI_FISH ) {
 	$db  = JFactory::getDBO();
@@ -181,6 +127,9 @@ if (!defined('FLEXI_ITEMVIEW'))		define('FLEXI_ITEMVIEW'	, FLEXI_J16GE ? 'item' 
 if (!defined('FLEXI_ICONPATH'))		define('FLEXI_ICONPATH'	, FLEXI_J16GE ? 'media/system/images/' : 'images/M_images/' );
 
 // Version constants
-define('FLEXI_VERSION',	FLEXI_J16GE ? '2.3.0' : '2.3.0');
-define('FLEXI_RELEASE',	'alpha');
+define('FLEXI_PHP_NEEDED',	'5.3.0');
+define('FLEXI_PHP_RECOMMENDED',	'5.4.0');
+define('FLEXI_VERSION', '3.2.0-dev');
+define('FLEXI_RELEASE',	'');
+define('FLEXI_VHASH',	md5(filemtime(__FILE__) . filectime(__FILE__) . FLEXI_VERSION));
 ?>

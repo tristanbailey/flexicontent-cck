@@ -19,7 +19,7 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.model');
+jimport('legacy.model.legacy');
 
 /**
  * FLEXIcontent Component Template Model
@@ -31,12 +31,45 @@ jimport('joomla.application.component.model');
 class FlexicontentModelTemplate extends JModelLegacy
 {
 	/**
-	 * Layout data
+	 * Layout data (XML schema, CSS/JS files, image, etc)
 	 *
 	 * @var object
 	 */
 	var $_layout = null;
-
+	
+	/**
+	 * Layout type (Either: item -or- category -or- ...)
+	 *
+	 * @var object
+	 */
+	var $_type = null;
+	
+	/**
+	 * Layout template folder (real folder in storage)
+	 *
+	 * @var object
+	 */
+	var $_folder = null;
+	
+	
+	/**
+	 * Layout configuration name
+	 *
+	 * @var object
+	 */
+	var $_cfgname = null;
+	
+	
+	/**
+	 * Layout configuration data (template parameters / attibutes)
+	 *
+	 * @var object
+	 */
+	var $_config = null;
+	
+	
+	
+	
 	/**
 	 * Constructor
 	 *
@@ -45,27 +78,47 @@ class FlexicontentModelTemplate extends JModelLegacy
 	function __construct()
 	{
 		parent::__construct();
-
+		
 		$type 	= JRequest::getVar('type',  'items', '', 'word');
 		$folder = JRequest::getVar('folder',  'default', '', 'cmd');
-		$this->setId($type, $folder);
+		$cfgname = JRequest::getVar('cfgname',  '', '', 'cmd');
+		$this->setId($type, $folder, $cfgname);
 	}
-
+	
+	
 	/**
 	 * Method to set the identifier
 	 *
 	 * @access	public
 	 * @param	int item identifier
 	 */
-	function setId($type, $folder)
+	function setId($type, $folder, $cfgname)
 	{
 		// Set item id and wipe data
-		$this->_type	    = $type;
-		$this->_folder		= $folder;
+		$this->_layout  = null;
+		$this->_config  = null;
+		$this->_type    = $type;
+		$this->_folder  = $folder;
+		$this->_cfgname = $cfgname;
 	}
-
+	
+	
 	/**
-	 * Method to get templates data
+	 * Method to set the layout type ('items' or 'category')
+	 * 'items': single item layout
+	 * 'category': multi-item layout
+	 *
+	 * @access	public
+	 * @param	int item identifier
+	 */
+	function setLayoutType($type)
+	{
+		$this->_type    = $type;
+	}
+	
+	
+	/**
+	 * Method to get the layout data (XML schema, CSS/JS files, image, etc)
 	 *
 	 * @access public
 	 * @return array
@@ -80,7 +133,7 @@ class FlexicontentModelTemplate extends JModelLegacy
 
 		return $this->_layout;
 	}
-
+	
 	
 	/**
 	 * Method to get the object
@@ -91,15 +144,15 @@ class FlexicontentModelTemplate extends JModelLegacy
 	 */
 	function _getLayout()
 	{
-		$tmpl	= flexicontent_tmpl::getTemplates();
-
-		$layout = $tmpl->{$this->_type}->{$this->_folder};
+		// Get all templates re-parsing only XML/LESS files of a specific template
+		$tmpl	= flexicontent_tmpl::getTemplates($this->_folder, $skip_less_compile=true);  // Will check less compiling later ...
+		
+		$layout = !isset($tmpl->{$this->_type}->{$this->_folder})  ?  false  :  $tmpl->{$this->_type}->{$this->_folder};
 		
 		return $layout;
 	}
 	
-
-
+	
 	/**
 	 * Method to get all available fields
 	 *
@@ -124,21 +177,81 @@ class FlexicontentModelTemplate extends JModelLegacy
 	
 	
 	/**
-	 * Method to get types list when performing an edit action
+	 * Method to get Layout configuration data (template parameters / attibutes)
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getLayoutConf()
+	{
+		$query  = 'SELECT * '
+			. ' FROM #__flexicontent_layouts_conf as f '
+			. ' WHERE template = ' . $this->_db->Quote($this->_folder)
+			. '  AND cfgname = ' . $this->_db->Quote($this->_cfgname)
+			. '  AND layout = ' . $this->_db->Quote($this->_type)
+			;
+		$this->_db->setQuery($query);
+		$layoutConf = $this->_db->loadObject();
+		if ($layoutConf===false) {
+			JError::raiseWarning( 500, $this->_db->getError() );
+		}
+		if (!$layoutConf) {
+			$layoutConf = new stdClass();
+			$layoutConf->template = $this->_folder;
+			$layoutConf->cfgname = $this->_cfgname;
+			$layoutConf->attribs = '';
+		}
+		$layoutConf->attribs = new JRegistry($layoutConf->attribs);
+		$layoutConf->attribs = $layoutConf->attribs->toArray();
+		
+		//echo "<pre>"; print_r($layoutConf); echo "</pre>";
+		return $layoutConf;
+	}
+	
+		/**
+	 * Method to get Layout configuration data (template parameters / attibutes)
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function storeLayoutConf($folder, $cfgname, $layout, $attribs)
+	{
+		// delete old record
+		$query 	= 'DELETE FROM #__flexicontent_layouts_conf'
+			. ' WHERE template = ' . $this->_db->Quote($folder)
+			. '  AND cfgname = ' . $this->_db->Quote($cfgname)
+			. '  AND layout = ' . $this->_db->Quote($layout)
+			;
+		$this->_db->setQuery($query);
+		$this->_db->execute();
+		
+		$attribs = json_encode($attribs);
+		//echo "<pre>"; print_r($attribs); echo "</pre>";
+		
+		$query 	= 'INSERT INTO #__flexicontent_layouts_conf (`template`, `cfgname`, `layout`, `attribs`)'
+			.' VALUES(' .
+				$this->_db->Quote($folder) . ',' .
+				$this->_db->Quote($cfgname) . ',' .
+				$this->_db->Quote($layout) . ',' .
+				$this->_db->Quote($attribs) .
+			')'
+			;
+		$this->_db->setQuery($query);
+		$this->_db->execute();
+		
+		return true;
+	}
+	
+	
+	/**
+	 * Method to get types list
 	 * 
 	 * @return array
 	 * @since 1.5
 	 */
-	function getContentTypesList()
+	function getTypeslist ( $type_ids=false, $check_perms = false, $published=true )
 	{
-		$query = 'SELECT id, name'
-			. ' FROM #__flexicontent_types'
-			. ' WHERE published = 1'
-			. ' ORDER BY name ASC'
-			;
-		$this->_db->setQuery($query);
-		$types = $this->_db->loadObjectList();
-		return $types;	
+		return flexicontent_html::getTypesList( $type_ids, $check_perms, $published);
 	}
 	
 	
@@ -153,11 +266,11 @@ class FlexicontentModelTemplate extends JModelLegacy
 		$db = JFactory::getDBO();
 		
 		$query = 'SELECT element AS type_name, REPLACE(name, "FLEXIcontent - ", "") AS field_name '
-		. ' FROM '.(FLEXI_J16GE ? '#__extensions' : '#__plugins')
-		. ' WHERE '.(FLEXI_J16GE ? 'enabled = 1' : 'published = 1')
-		. (FLEXI_J16GE ? ' AND `type`=' . $db->Quote('plugin') : '')
-		. ' AND folder = ' . $db->Quote('flexicontent_fields')
-		. ' AND element <> ' . $db->Quote('core')
+		. ' FROM #__extensions'
+		. ' WHERE enabled = 1'
+		. '  AND `type`=' . $db->Quote('plugin')
+		. '  AND `folder` = ' . $db->Quote('flexicontent_fields')
+		. '  AND `element` <> ' . $db->Quote('core')
 		. ' ORDER BY field_name ASC'
 		;
 		
@@ -184,10 +297,11 @@ class FlexicontentModelTemplate extends JModelLegacy
 	function getFieldsByPositions()
 	{
 		$query  = 'SELECT *'
-				. ' FROM #__flexicontent_templates'
-				. ' WHERE template = ' . $this->_db->Quote($this->_folder)
-				. ' AND layout = ' . $this->_db->Quote($this->_type)
-				;				;
+			. ' FROM #__flexicontent_templates'
+			. ' WHERE template = ' . $this->_db->Quote($this->_folder)
+			. '  AND cfgname = ' . $this->_db->Quote($this->_cfgname)
+			. '  AND layout = ' . $this->_db->Quote($this->_type)
+			;
 		$this->_db->setQuery($query);
 		$positions = $this->_db->loadObjectList('position');
 
@@ -220,12 +334,13 @@ class FlexicontentModelTemplate extends JModelLegacy
 	function deletePosition($pos)
 	{
 		$query  = 'DELETE FROM #__flexicontent_templates'
-				. ' WHERE template = ' . $this->_db->Quote($this->_folder)
-				. ' AND layout = ' . $this->_db->Quote($this->_type)
-				. ' AND position = ' . $this->_db->Quote($pos)
-				;
+			. ' WHERE template = ' . $this->_db->Quote($this->_folder)
+			. '  AND cfgname = ' . $this->_db->Quote($this->_cfgname)
+			. '  AND layout = ' . $this->_db->Quote($this->_type)
+			. '  AND position = ' . $this->_db->Quote($pos)
+			;
 		$this->_db->setQuery( $query );
-		if (!$this->_db->query()) {
+		if (!$this->_db->execute()) {
 			JError::raiseWarning( 500, $this->_db->getError() );
 		}
 	}
@@ -249,37 +364,94 @@ class FlexicontentModelTemplate extends JModelLegacy
 		}
 		return ($usedfields ? array_unique($usedfields) : array());
 	}
-
+	
+	
 	/**
-	 * Method to store a field group
+	 * Method to store a field positions
 	 *
 	 * @access	public
 	 * @return	boolean	True on success
 	 * @since	1.5
 	 */
-	function store($folder, $type, $p, $record)
+	function storeFieldPositions($folder, $cfgname, $type, &$positions, &$records)
 	{
-		// delete old record
-		$query 	= 'DELETE FROM #__flexicontent_templates'
-				. ' WHERE template = ' . $this->_db->Quote($folder)
-				. ' AND layout = ' . $this->_db->Quote($type)
-				. ' AND position = ' . $this->_db->Quote($p)
-				;
-		$this->_db->setQuery($query);
-		$this->_db->query();
+		$folder_quoted  = $this->_db->Quote($folder);
+		$cfgname_quoted = $this->_db->Quote($cfgname);
+		$type_quoted    = $this->_db->Quote($type);
 		
-		if ($record != '') {
-			$query 	= 'INSERT INTO #__flexicontent_templates (`template`, `layout`, `position`, `fields`)'
-					.' VALUES(' . $this->_db->Quote($folder) . ',' . $this->_db->Quote($type) . ',' . $this->_db->Quote($p) . ',' . $this->_db->Quote($record) . ')'
-					;
+		$pos_quoted = array();
+		$rec_vals = array();
+		foreach ($positions as $pos) {
+			$pos_quoted[$pos] = $this->_db->Quote($pos);
+			if ($records[$pos] != '')
+				$rec_vals[$pos] = '('. $folder_quoted. ',' .$cfgname_quoted. ',' .$type_quoted. ',' .$pos_quoted[$pos]. ',' .$this->_db->Quote($records[$pos]) .')';
+		}
+		
+		// Delete old records
+		$query 	= 'DELETE FROM #__flexicontent_templates'
+			. ' WHERE template = ' . $this->_db->Quote($folder)
+			. '  AND cfgname = ' . $this->_db->Quote($cfgname)
+			. '  AND layout = ' . $this->_db->Quote($type)
+			. '  AND position IN (' . implode(',', $pos_quoted) . ')'
+			;
+		$this->_db->setQuery($query);
+		$this->_db->execute();
+		
+		if ( count($rec_vals) ) {
+			$query 	= 'INSERT INTO #__flexicontent_templates '.
+				'(`template`, `cfgname`, `layout`, `position`, `fields`)'
+				.'  VALUES '
+				.implode(",\n", $rec_vals);
 			$this->_db->setQuery($query);
-			$this->_db->query();
-			// don't forget to check if no field was prevouilsly altered
+			$this->_db->execute();
 		}
 		
 		return true;
 	}
+	
+	
+	/**
+	 * Method to store parameters as LESS variables
+	 *
+	 * @access	public
+	 * @return	boolean	True on success
+	 * @since	1.5
+	 */
+	function storeLessConf($folder, $cfgname, $layout, $attribs)
+	{
+		// Load the XML file into a JForm object
+		$jform = new JForm('com_flexicontent.template', array('control' => 'jform', 'load_data' => true));
+		$jform->load($this->_getLayout()->params);   // params is the XML file contents as a string
+		
+		$layout_type = $layout=='items' ? 'item' : 'category';
+		$tmpldir = JPath::clean(JPATH_ROOT.DS.'components'.DS.'com_flexicontent'.DS.'templates');
+		$less_path = JPath::clean($tmpldir.DS.$folder.DS.'less/include/config_auto_'.$layout_type.'.less');
+		//echo "<pre>".$less_path."<br/>";
 
-
+		$_FCLL = '@FC'. ($layout == 'items' ? 'I' : 'C').'_';
+		
+		// Get 'attribs' fieldset
+		$fieldSets = $jform->getFieldsets($groupname = 'attribs');
+		
+		// Iterate though the form elements and only use parameters with cssprep="less"
+		$less_data = "/* This is created automatically, do NOT edit this manually! \nThis is used by ".$layout_type." layout to save parameters as less variables. \nNOTE: Make sure that this is imported by 'config.less' \n to make a parameter be a LESS variable, edit parameter in ".$layout_type.".xml and add cssprep=\"less\" \n created parameters will be like: @FC".($layout=='items'? 'I' : 'C')."_parameter_name: value; */\n\n";
+		foreach($jform->getFieldsets($groupname) as $fsname => $fieldSet)
+		{
+			foreach($jform->getFieldset($fsname) as $field)
+			{
+				if ($field->getAttribute('cssprep')!='less') continue;  // Only add parameters meant to be less variables
+				$v = isset($attribs[$field->fieldname])  ?  $attribs[$field->fieldname] : '';
+				if (is_array($v)) continue;  // array parameters not supported
+				$v = trim($v);
+				if ( !strlen($v) ) {
+					$v = $field->getAttribute('default');
+					if ( !strlen($v) ) continue;  // do not add empty parameters
+				}
+				$less_data .= $_FCLL.$field->fieldname.': '.$v.";\n";
+			}
+		}
+		file_put_contents($less_path, $less_data);
+		
+		return true;
+	}
 }
-?>

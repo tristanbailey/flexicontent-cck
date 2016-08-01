@@ -6,68 +6,86 @@
 	<license>GPLv3</license>
 	<version>1.2</version>
 	<release>20 May 2014</release>
-	<description>HTML5 layout</description>
+	<microdata_support>1</microdata_support>
+
+	<defaulttitle>FLEXI_TMPL_BLOG_ITEM_DEFAULT_TITLE</defaulttitle>
+	<description>FLEXI_TMPL_BLOG_ITEM_SHORT_DESC</description>
+
 	<fields name="attribs">
 		<fieldset name="attribs" addfieldpath="/administrator/components/com_flexicontent/elements">
-		<field name="title_cut_text" type="text" size="3" default="" label="FLEXI_TITLE_MAXLEN" description="FLEXI_TITLE_MAXLEN_DESC" />
-		<field name="show_author" type="radio" default="" label="FLEXI_SHOWAUTHOR" description="FLEXI_SHOWAUTHOR_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		<field name="show_create_date" type="radio" default="" label="FLEXI_SHOWCREATED" description="FLEXI_SHOWCREATED_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		<field name="show_modifier" type="radio" default="" label="FLEXI_SHOWMODIFIEDBY" description="FLEXI_SHOWMODIFIEDBY_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		<field name="show_modify_date" type="radio" default="" label="FLEXI_SHOWMODIFIED" description="FLEXI_SHOWMODIFIED_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		<field name="show_category" type="radio" default="" label="FLEXI_SHOWCATS" description="FLEXI_SHOWCATS_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		<field name="show_vote" type="radio" default="" label="FLEXI_SHOWRATING" description="FLEXI_SHOWRATING_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		<field name="show_favs" type="radio" default="" label="FLEXI_SHOWFAVS" description="FLEXI_SHOWFAVS_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		<field name="show_tags" type="radio" default="" label="FLEXI_SHOWTAGS" description="FLEXI_SHOWTAGS_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_HIDE</option>
-			<option value="1">FLEXI_SHOW</option>
-		</field>
-		
-		<field name="Customblocks" type="separator" hr="false" default="FLEXI_BLOCKS_CUSTOM_FIELDS" level="level2" menu="hide" />
-		
-		<field name="columnmode" type="radio" default="" label="FLEXI_COLUMN_MODE" description="FLEXI_COLUMN_MODE_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_COLUMN_MODE_FORCE_1_COLS</option>
-			<option value="1">FLEXI_COLUMN_MODE_FORCE_2_COLS</option>
-			<option value="2">FLEXI_COLUMN_MODE_FORCE_AUTO_COLS</option>
-		</field>
-		
-		<field name="templatehtmlmode" type="separator" hr="false" default="FLEXI_TEMPLATE_HTML_MODE" level="level2" menu="hide" />
-		<field name="htmlmode" type="radio" default="" label="FLEXI_HTML_MODE" description="FLEXI_HTML_MODE_DESC" filter="int" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_XHTML</option>
-			<option value="1">FLEXI_HTML5</option>
-		</field>
+			
+			<field name="custom_layout_title" type="text" size="3" not_inherited="1" default="" label="FLEXI_LAYOUT_CUSTOM_DISPLAY_TITLE" description="FLEXI_LAYOUT_CUSTOM_DISPLAY_TITLE_DESC" />
+			
+			<field name="title_grp" type="separator" cssprep="1" default="FLEXI_TMPL_ITEM_TITLE" description="" level="level2" />
+			<field name="title_color" type="color" cssprep="less" default="inherit" label="Title color" description="Color of title" />
+			<field name="title_cut_text" type="text" size="3" default="" label="FLEXI_TITLE_MAXLEN" description="FLEXI_TITLE_MAXLEN_DESC" />
+			
+			<field name="label_styling_grp" type="separator" cssprep="1" default="FLEXI_TMPL_LABEL_STYLING" description="" level="level2" />
+			<field name="label_bg_color" type="color" cssprep="less" default="#999999" label="FLEXI_TMPL_LABEL_BG" description="FLEXI_TMPL_LABEL_BG_DESC" />
+			<field name="label_txt_color" type="color" cssprep="less" default="#ffffff" label="FLEXI_TMPL_LABEL_TXT_COLOR" description="FLEXI_TMPL_LABEL_TXT_COLOR_DESC" />
+			<field name="label_radius" type="number" cssprep="less" default="3" label="FLEXI_TMPL_LABEL_RADIUS" description="FLEXI_TMPL_LABEL_RADIUS_DESC" min="0" max="80" step="1" />
+			
+			<field name="display_field_grp" type="separator" cssprep="1" default="FLEXI_TMPL_FIELD_DISPLAY" description="" level="level2" />
+			<field name="show_author" type="radio" default="" label="FLEXI_SHOWAUTHOR" description="FLEXI_SHOWAUTHOR_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			<field name="show_create_date" type="radio" default="" label="FLEXI_SHOWCREATED" description="FLEXI_SHOWCREATED_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			<field name="show_modifier" type="radio" default="" label="FLEXI_SHOWMODIFIEDBY" description="FLEXI_SHOWMODIFIEDBY_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			<field name="show_modify_date" type="radio" default="" label="FLEXI_SHOWMODIFIED" description="FLEXI_SHOWMODIFIED_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			<field name="show_category" type="radio" default="" label="FLEXI_SHOWCATS" description="FLEXI_SHOWCATS_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			<field name="show_vote" type="radio" default="" label="FLEXI_SHOWRATING" description="FLEXI_SHOWRATING_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			<field name="show_favs" type="radio" default="" label="FLEXI_SHOWFAVS" description="FLEXI_SHOWFAVS_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			<field name="show_tags" type="radio" default="" label="FLEXI_SHOWTAGS" description="FLEXI_SHOWTAGS_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_HIDE</option>
+				<option value="1">FLEXI_SHOW</option>
+			</field>
+			
+			<field name="Customblocks" type="separator" default="FLEXI_BLOCKS_CUSTOM_FIELDS" level="level2" menu="hide" />
+			
+			<field name="columnmode" type="radio" default="" label="FLEXI_COLUMN_MODE" description="FLEXI_COLUMN_MODE_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_COLUMN_MODE_FORCE_1_COLS</option>
+				<option value="1">FLEXI_COLUMN_MODE_FORCE_2_COLS</option>
+				<option value="2">FLEXI_COLUMN_MODE_FORCE_AUTO_COLS</option>
+			</field>
+			
+			<field name="templatehtmlmode" type="separator" default="FLEXI_TEMPLATE_HTML_MODE" level="level2" menu="hide" />
+			<field name="htmlmode" type="radio" default="" label="FLEXI_HTML_MODE" description="FLEXI_HTML_MODE_DESC" filter="int" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_XHTML</option>
+				<option value="1">FLEXI_HTML5</option>
+			</field>
+			
 		</fieldset>
 	</fields> 
+	
 	<fieldgroups>
 		<group readonly="true">fields_top</group>
 		<group>beforedescription</group>

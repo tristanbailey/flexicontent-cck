@@ -19,7 +19,7 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.model');
+jimport('legacy.model.legacy');
 
 /**
  * FLEXIcontent Component Model
@@ -70,18 +70,23 @@ class FlexicontentModelFavourites extends JModelLegacy
 		// Set id and load parameters
 		$id = 0;  // no id used by this view
 		$this->setId((int)$id);
-		$params = & $this->_params;
+		$cparams = & $this->_params;
 		
-		// Set the pagination variables into state (We get them from http request OR use default tags view parameters)
-		$limit = JRequest::getVar('limit') ? JRequest::getVar('limit') : $params->get('limit');
-		$limitstart = JRequest::getInt('limitstart');
-
+		// Set the pagination variables into state (We get them from http request OR use view's parameters)
+		$limit = strlen(JRequest::getVar('limit')) ? JRequest::getInt('limit') : $this->_params->get('limit');
+		$limitstart	= JRequest::getInt('limitstart', JRequest::getInt('start', 0, '', 'int'), '', 'int');
+		
+		// In case limit has been changed, adjust limitstart accordingly
+		$limitstart = ( $limit != 0 ? (floor($limitstart / $limit) * $limit) : 0 );
+		JRequest::setVar('limitstart', $limitstart);  // Make sure it is limitstart is set
+		JFactory::getApplication()->input->set('limitstart', $limitstart);
+		
 		$this->setState('limit', $limit);
 		$this->setState('limitstart', $limitstart);
 		
-		// Get the filter request variables
-		$this->setState('filter_order', 'i.modified');
-		$this->setState('filter_order_dir', 'DESC');
+		// Set filter order variables into state
+		$this->setState('filter_order', JRequest::getCmd('filter_order', 'i.modified', 'default'));
+		$this->setState('filter_order_Dir', JRequest::getCmd('filter_order_Dir', 'DESC', 'default'));
 	}
 	
 	
@@ -150,10 +155,12 @@ class FlexicontentModelFavourites extends JModelLegacy
 	{
 		// Lets load the content if it doesn't already exist
 		if (empty($this->_data))
-		{		
+		{
+			// Query the content items
 			$query = $this->_buildQuery();
 			$this->_data = $this->_getList( $query, $this->getState('limitstart'), $this->getState('limit') );
-			if ($this->_db->getErrorNum())  JFactory::getApplication()->enqueueMessage(__FUNCTION__.'(): SQL QUERY ERROR:<br/>'.nl2br($this->_db->getErrorMsg()),'error');
+			// Get Original content ids for creating some untranslatable fields that have share data (like shared folders)
+			flexicontent_db::getOriginalContentItemids($this->_data);
 		}
 		
 		return $this->_data;
@@ -185,10 +192,12 @@ class FlexicontentModelFavourites extends JModelLegacy
 	 * @access	public
 	 * @return	object
 	 */
-	public function getPagination() {
+	public function getPagination()
+	{
 		// Load the content if it doesn't already exist
-		if (empty($this->_pagination)) {
-			//jimport('joomla.html.pagination');
+		if (empty($this->_pagination))
+		{
+			//jimport('cms.pagination.pagination');
 			require_once (JPATH_COMPONENT.DS.'helpers'.DS.'pagination.php');
 			$this->_pagination = new FCPagination($this->getTotal(), $this->getState('limitstart'), $this->getState('limit') );
 		}
@@ -205,10 +214,10 @@ class FlexicontentModelFavourites extends JModelLegacy
 	function _buildQuery()
 	{   	
 		$user		= JFactory::getUser();
-		$params = & $this->_params;
+		$cparams = & $this->_params;
 		
 		// show unauthorized items
-		$show_noauth = $params->get('show_noauth', 0);
+		$show_noauth = $cparams->get('show_noauth', 0);
 		
 		// Select only items that user has view access, if listing of unauthorized content is not enabled
 		$joinaccess	 = '';
@@ -219,61 +228,23 @@ class FlexicontentModelFavourites extends JModelLegacy
 		$select_access .= ', c.access as category_access, ty.access as type_access';
 		
 		if ( !$show_noauth ) {   // User not allowed to LIST unauthorized items
-			if (FLEXI_J16GE) {
-				$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
-				$aid_list = implode(",", $aid_arr);
-				$andaccess .= ' AND ty.access IN (0,'.$aid_list.')';
-				$andaccess .= ' AND  c.access IN (0,'.$aid_list.')';
-				$andaccess .= ' AND  i.access IN (0,'.$aid_list.')';
-			} else {
-				$aid = (int) $user->get('aid');
-				if (FLEXI_ACCESS) {
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gt ON ty.id = gt.axo AND gt.aco = "read" AND gt.axosection = "type"';
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gc ON  c.id = gc.axo AND gc.aco = "read" AND gc.axosection = "category"';
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gi ON  i.id = gi.axo AND gi.aco = "read" AND gi.axosection = "item"';
-					$andaccess	.= ' AND (gt.aro IN ( '.$user->gmid.' ) OR ty.access <= '. $aid . ')';
-					$andaccess	.= ' AND (gc.aro IN ( '.$user->gmid.' ) OR  c.access <= '. $aid . ')';
-					$andaccess  .= ' AND (gi.aro IN ( '.$user->gmid.' ) OR  i.access <= '. $aid . ')';
-				} else {
-					$andaccess  .= ' AND ty.access <= '.$aid;
-					$andaccess  .= ' AND  c.access <= '.$aid;
-					$andaccess  .= ' AND  i.access <= '.$aid;
-				}
-			}
+			$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
+			$aid_list = implode(",", $aid_arr);
+			$andaccess .= ' AND ty.access IN (0,'.$aid_list.')';
+			$andaccess .= ' AND  c.access IN (0,'.$aid_list.')';
+			$andaccess .= ' AND  i.access IN (0,'.$aid_list.')';
 			$select_access .= ', 1 AS has_access';
 		}
 		else {
 			// Access Flags for: content type, main category, item
-			if (FLEXI_J16GE) {
-				$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
-				$aid_list = implode(",", $aid_arr);
-				$select_access .= ', '
-					.' CASE WHEN '
-					.'  ty.access IN (0,'.$aid_list.') AND '
-					.'   c.access IN (0,'.$aid_list.') AND '
-					.'   i.access IN (0,'.$aid_list.') '
-					.' THEN 1 ELSE 0 END AS has_access';
-			} else {
-				$aid = (int) $user->get('aid');
-				if (FLEXI_ACCESS) {
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gt ON ty.id = gt.axo AND gt.aco = "read" AND gt.axosection = "type"';
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gc ON  c.id = gc.axo AND gc.aco = "read" AND gc.axosection = "category"';
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gi ON  i.id = gi.axo AND gi.aco = "read" AND gi.axosection = "item"';
-					$select_access .= ', '
-						.' CASE WHEN '
-						.'  (gt.aro IN ( '.$user->gmid.' ) OR ty.access <= '. (int) $aid . ') AND '
-						.'  (gc.aro IN ( '.$user->gmid.' ) OR  c.access <= '. (int) $aid . ') AND '
-						.'  (gi.aro IN ( '.$user->gmid.' ) OR  i.access <= '. (int) $aid . ') '
-						.' THEN 1 ELSE 0 END AS has_access';
-				} else {
-					$select_access .= ', '
-						.' CASE WHEN '
-						.'  (ty.access <= '. (int) $aid . ') AND '
-						.'  ( c.access <= '. (int) $aid . ') AND '
-						.'  ( i.access <= '. (int) $aid . ') '
-						.' THEN 1 ELSE 0 END AS has_access';
-				}
-			}
+			$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
+			$aid_list = implode(",", $aid_arr);
+			$select_access .= ', '
+				.' CASE WHEN '
+				.'  ty.access IN (0,'.$aid_list.') AND '
+				.'   c.access IN (0,'.$aid_list.') AND '
+				.'   i.access IN (0,'.$aid_list.') '
+				.' THEN 1 ELSE 0 END AS has_access';
 		}
 		
 		// Create sql WHERE clause
@@ -287,14 +258,24 @@ class FlexicontentModelFavourites extends JModelLegacy
 		
 		// Create JOIN for ordering items by a custom field (Level 1)
 		if ( 'field' == $order[1] ) {
-			$orderbycustomfieldid = (int)$params->get('orderbycustomfieldid', 0);
+			$orderbycustomfieldid = (int)$cparams->get('orderbycustomfieldid', 0);
 			$orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f ON f.item_id = i.id AND f.field_id='.$orderbycustomfieldid;
+		}
+		if ( 'custom:' == substr($order[1], 0, 7) ) {
+			$order_parts = preg_split("/:/", $order[1]);
+			$_field_id = (int) @ $order_parts[1];
+			if ($_field_id && count($order_parts)==4) $orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f ON f.item_id = i.id AND f.field_id='.$_field_id;
 		}
 		
 		// Create JOIN for ordering items by a custom field (Level 2)
 		if ( 'field' == $order[2] ) {
-			$orderbycustomfieldid_2nd = (int)$params->get('orderbycustomfieldid'.'_2nd', 0);
+			$orderbycustomfieldid_2nd = (int)$cparams->get('orderbycustomfieldid'.'_2nd', 0);
 			$orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f2 ON f2.item_id = i.id AND f2.field_id='.$orderbycustomfieldid_2nd;
+		}
+		if ( 'custom:' == substr($order[2], 0, 7) ) {
+			$order_parts = preg_split("/:/", $order[2]);
+			$_field_id = (int) @ $order_parts[1];
+			if ($_field_id && count($order_parts)==4) $orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f2 ON f2.item_id = i.id AND f2.field_id='.$_field_id;
 		}
 		
 		// Create JOIN for ordering items by author's name
@@ -305,8 +286,8 @@ class FlexicontentModelFavourites extends JModelLegacy
 		
 		// Create JOIN for ordering items by a most commented
 		if ( in_array('commented', $order) ) {
-			$orderby_col   = ', count(com.object_id) AS comments_total';
-			$orderby_join .= ' LEFT JOIN #__jcomments AS com ON com.object_id = i.id';
+			$orderby_col   = ', COUNT(DISTINCT com.id) AS comments_total';
+			$orderby_join .= ' LEFT JOIN #__jcomments AS com ON com.object_id = i.id AND com.object_group="com_flexicontent" AND com.published="1"';
 		}
 		
 		// Create JOIN for ordering items by a most rated
@@ -323,6 +304,7 @@ class FlexicontentModelFavourites extends JModelLegacy
 		$query = 'SELECT i.id, i.*, ie.* '
 			. $orderby_col
 			. $select_access
+			. ', c.title AS maincat_title, c.alias AS maincat_alias'  // Main category data
 			. ', CASE WHEN CHAR_LENGTH(i.alias) THEN CONCAT_WS(\':\', i.id, i.alias) ELSE i.id END as slug'
 			. ', CASE WHEN CHAR_LENGTH(c.alias) THEN CONCAT_WS(\':\', c.id, c.alias) ELSE c.id END as categoryslug'
 			. ' FROM #__content AS i'
@@ -349,9 +331,9 @@ class FlexicontentModelFavourites extends JModelLegacy
 	 */
 	function _buildItemOrderBy(& $order='')
 	{
-		$request_var = $this->_params->get('orderby_override') ? 'orderby' : '';
+		$request_var = $this->_params->get('orderby_override', 0) || $this->_params->get('orderby_override_2nd', 0) ? 'orderby' : '';
 		$default_order = $this->getState('filter_order');
-		$default_order_dir = $this->getState('filter_order_dir');
+		$default_order_dir = $this->getState('filter_order_Dir');
 		
 		// Precedence: $request_var ==> $order ==> $config_param ==> $default_order
 		return flexicontent_db::buildItemOrderBy(
@@ -375,7 +357,7 @@ class FlexicontentModelFavourites extends JModelLegacy
 		$db   = JFactory::getDBO();
 		
 		// Get the view's parameters
-		$params = $this->_params;
+		$cparams = $this->_params;
 		
 		// Date-Times are stored as UTC, we should use current UTC time to compare and not user time (requestTime),
 		//  thus the items are published globally at the time the author specified in his/her local clock
@@ -391,12 +373,7 @@ class FlexicontentModelFavourites extends JModelLegacy
 		
 		// Get privilege to view non viewable items (upublished, archived, trashed, expired, scheduled).
 		// NOTE:  ACL view level is checked at a different place
-		if ( FLEXI_J16GE )
-			$ignoreState = $user->authorise('flexicontent.ignoreviewstate', 'com_flexicontent');
-		else if (FLEXI_ACCESS)
-			$ignoreState = ($user->gid < 25) ? FAccess::checkComponentAccess('com_flexicontent', 'ignoreviewstate', 'users', $user->gmid) : 1;
-		else
-			$ignoreState = $user->gid  > 19;  // author has 19 and editor has 20
+		$ignoreState = $user->authorise('flexicontent.ignoreviewstate', 'com_flexicontent');
 		
 		if (!$ignoreState) {
 			// Limit by publication state. Exception: when displaying personal user items or items modified by the user
@@ -418,12 +395,21 @@ class FlexicontentModelFavourites extends JModelLegacy
 		// Create WHERE clause part for Text Search 
 		// ****************************************
 		
-		$text = JRequest::getString('filter', '', 'default');
-		//$text = $this->_params->get('use_search') ? $text : '';
-		$phrase = JRequest::getVar('searchphrase', 'exact', 'default');
+		$text = JRequest::getString('filter', JRequest::getString('q', ''), 'default');
+		
+		// Check for LIKE %word% search, for languages without spaces
+		$filter_word_like_any = $cparams->get('filter_word_like_any', 0);
+		
+		$phrase = $filter_word_like_any ?
+			JRequest::getWord('searchphrase', JRequest::getWord('p', 'any'),   'default') :
+			JRequest::getWord('searchphrase', JRequest::getWord('p', 'exact'), 'default');
+		
 		$si_tbl = 'flexicontent_items_ext';
 		
-		$text = trim( $text );
+		$search_prefix = $cparams->get('add_search_prefix') ? 'vvv' : '';   // SEARCH WORD Prefix
+		$text = !$search_prefix  ?  trim( $text )  :  preg_replace('/(\b[^\s,\.]+\b)/u', $search_prefix.'$0', trim($text));
+		$words = preg_split('/\s\s*/u', $text);
+		
 		if( strlen($text) )
 		{
 			$ts = 'ie';
@@ -441,10 +427,9 @@ class FlexicontentModelFavourites extends JModelLegacy
 					break;
 				
 				case 'exact':
-					$words = preg_split('/\s\s*/u', $text);
 					$stopwords = array();
 					$shortwords = array();
-					$words = flexicontent_db::removeInvalidWords($words, $stopwords, $shortwords, $si_tbl, 'search_index', $isprefix=0);
+					if (!$search_prefix) $words = flexicontent_db::removeInvalidWords($words, $stopwords, $shortwords, $si_tbl, 'search_index', $isprefix=0);
 					if (empty($words)) {
 						// All words are stop-words or too short, we could try to execute a query that only contains a LIKE %...% , but it would be too slow
 						JRequest::setVar('ignoredwords', implode(' ', $stopwords));
@@ -461,10 +446,9 @@ class FlexicontentModelFavourites extends JModelLegacy
 					break;
 				
 				case 'all':
-					$words = preg_split('/\s\s*/u', $text);
 					$stopwords = array();
 					$shortwords = array();
-					$words = flexicontent_db::removeInvalidWords($words, $stopwords, $shortwords, $si_tbl, 'search_index', $isprefix=1);
+					if (!$search_prefix) $words = flexicontent_db::removeInvalidWords($words, $stopwords, $shortwords, $si_tbl, 'search_index', $isprefix=1);
 					JRequest::setVar('ignoredwords', implode(' ', $stopwords));
 					JRequest::setVar('shortwords', implode(' ', $shortwords));
 					
@@ -476,10 +460,9 @@ class FlexicontentModelFavourites extends JModelLegacy
 				
 				case 'any':
 				default:
-					$words = preg_split('/\s\s*/u', $text);
 					$stopwords = array();
 					$shortwords = array();
-					$words = flexicontent_db::removeInvalidWords($words, $stopwords, $shortwords, $si_tbl, 'search_index', $isprefix=1);
+					if (!$search_prefix) $words = flexicontent_db::removeInvalidWords($words, $stopwords, $shortwords, $si_tbl, 'search_index', $isprefix=1);
 					JRequest::setVar('ignoredwords', implode(' ', $stopwords));
 					JRequest::setVar('shortwords', implode(' ', $shortwords));
 					
@@ -510,12 +493,15 @@ class FlexicontentModelFavourites extends JModelLegacy
 		$app  = JFactory::getApplication();
 		$menu = $app->getMenu()->getActive();     // Retrieve active menu
 		
-		// Get the COMPONENT only parameters, then merge the menu parameters
-		$comp_params = JComponentHelper::getComponent('com_flexicontent')->params;
-		$params = FLEXI_J16GE ? clone ($comp_params) : new JParameter( $comp_params ); // clone( JComponentHelper::getParams('com_flexicontent') );
-		if ($menu) {
-			$menu_params = FLEXI_J16GE ? $menu->params : new JParameter($menu->params);
-			$params->merge($menu_params);
+		// Get the COMPONENT only parameter
+		$params  = new JRegistry();
+		$cparams = JComponentHelper::getParams('com_flexicontent');
+		$params->merge($cparams);
+		
+		// Merge the active menu parameters
+		if ($menu)
+		{
+			$params->merge($menu->params);
 		}
 		
 		$this->_params = $params;

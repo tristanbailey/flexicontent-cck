@@ -19,7 +19,7 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * HTML View class for the Stats View
@@ -51,21 +51,50 @@ class FlexicontentViewStats extends JViewLegacy
 		$votesstats	= $this->get( 'Votesstats' );
 		$creators   = $this->get( 'Creators' );
 		$editors    = $this->get( 'Editors' );
+
+		// ************************************************** New data*********************************************************************************************************************//
+		$itemsgraph  			   = $this->get('Itemsgraph');
+		$unpopular   			   = $this->get('Unpopular');
+		$totalitemspublish         = $this->get('Itemspublish');
+		$totalitemsunpublish       = $this->get('Itemsunpublish');
+		$totalitemswaiting         = $this->get('Itemswaiting');
+		$totalitemsprogress        = $this->get('Itemsprogress');
+		$metadescription           = $this->get('Itemsmetadescription');
+		$metakeywords              = $this->get('Itemsmetakeywords');
 		
-		//add css and submenu to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
+		// ************************************************** New data*********************************************************************************************************************//
 		
-		// Get User's Global Permissions
+		
+		// **************************
+		// Add css and js to document
+		// **************************
+		
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+
+
+
+		//*****************************************************************Adicionar as biblitecas*******************************************************************************************//
+		$document->addStyleSheet('//netdna.bootstrapcdn.com/font-awesome/3.2.1/css/font-awesome.css');
+		$document->addScript(JURI::root(true).'/components/com_flexicontent/librairies/esl/esl.js');
+		//*****************************************************************Adicionar as biblitecas*******************************************************************************************//
+		
+		
+		
+		// *****************************
+		// Get user's global permissions
+		// *****************************
+		
 		$perms = FlexicontentHelperPerm::getPerm();
 		
-		// **************************
-		// Create Submenu and toolbar
-		// **************************
-		FLEXISubmenu('CanStats');
 		
+		
+		// ************************
+		// Create Submenu & Toolbar
+		// ************************
+		
+		// Create Submenu (and also check access to current view)
+		FLEXISubmenu('CanStats');
 		
 		// Create document/toolbar titles
 		$doc_title = JText::_( 'FLEXI_STATISTICS' );
@@ -85,12 +114,6 @@ class FlexicontentViewStats extends JViewLegacy
 			JToolBarHelper::preferences('com_flexicontent', $_height, $_width, 'Configuration');
 		}
 		
-		//Load pane behavior
-		if (!FLEXI_J16GE) {
-			jimport('joomla.html.pane');
-			$pane = JPane::getInstance('Tabs');
-			$this->assignRef('pane'       , $pane);
-		}
 		$this->assignRef('genstats'		, $genstats);
 		$this->assignRef('popular'		, $popular);
 		$this->assignRef('rating'			, $rating);
@@ -100,7 +123,20 @@ class FlexicontentViewStats extends JViewLegacy
 		$this->assignRef('votesstats'	, $votesstats);
 		$this->assignRef('creators'		, $creators);
 		$this->assignRef('editors'		, $editors);
+
+		// ************************************************** New data*********************************************************************************************************************//
+		$this->assignRef('itemsgraph'		  , $itemsgraph);
+		$this->assignRef('unpopular'		  , $unpopular);
+		$this->assignRef('totalitemspublish'  , $totalitemspublish);
+		$this->assignRef('totalitemsunpublish', $totalitemsunpublish);
+		$this->assignRef('totalitemswaiting'  , $totalitemswaiting);
+		$this->assignRef('totalitemsprogress' , $totalitemsprogress);
+		$this->assignRef('metadescription'    , $metadescription);
+		$this->assignRef('metakeywords'    , $metakeywords);
 		
+		// ************************************************** New data*********************************************************************************************************************//
+
+		$this->sidebar = FLEXI_J30GE ? JHtmlSidebar::render() : null;
 		parent::display($tpl);
 	}
 }

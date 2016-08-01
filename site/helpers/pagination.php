@@ -18,7 +18,12 @@
 
 // Check to ensure this file is within the rest of the framework
 defined('JPATH_PLATFORM') or die;
-jimport('joomla.html.pagination');
+
+// Avoid problems with extensions that implement JPagination, instead of extending it, and have already load it
+if ( !class_exists('JPagination') )
+{
+	jimport('cms.pagination.pagination');
+}
 
 /**
  * Pagination Class.  Provides a common interface for content pagination for the
@@ -39,7 +44,8 @@ class FCPagination extends JPagination
 	 */
 	function getResultsCounter() {
 		// Initialize variables
-		$app = JFactory::getApplication();
+		$app  = JFactory::getApplication();
+		$view = JRequest::getCMD('view');
 		$html = null;
 		$fromResult = $this->limitstart + 1;
 
@@ -51,21 +57,29 @@ class FCPagination extends JPagination
 		}
 
 		// If there are results found
-		if ($this->total > 0) {
+		$fc_view_total = 0; //(int) $app->getUserState('fc_view_total_'.$view);
+		if (!$fc_view_total) $fc_view_total = $this->total;
+		
+		$is_featured_only = $app->getUserState('use_limit_before_search_filt') == 2;
+		if ($fc_view_total > 0)
+		{
 			// Check for maximum allowed of results
-			$fc_view_limit_max = JRequest::getWord('view')!='search'  ?  0  :  (int) $app->getUserState('fc_view_limit_max');
+			$fc_view_limit_max = JRequest::getWord('view')!='search'  ?  0  :  (int) $app->getUserState('fc_view_limit_max_'.$view);
 			$items_total_msg = $fc_view_limit_max && ($this->total >= $fc_view_limit_max) ? 'FLEXI_ITEM_S_OR_MORE' : 'FLEXI_ITEM_S';
 			
 			$html =
-				 "<span class='flexi label item_total_label'>".JText::_( 'FLEXI_TOTAL')."</span> "
-				."<span class='flexi value item_total_value'>".$this->total." " .JText::_( $items_total_msg )."</span>"
-				."<span class='flexi label item_total_label'>".JText::_( 'FLEXI_DISPLAYING')."</span> "
-				."<span class='flexi value item_total_value'>".$fromResult ." - " .$toResult ." " .JText::_( 'FLEXI_ITEM_S')."</span>"
+				 '<span class="flexi label item_total_label'.($is_featured_only ? ' label-success' : '').'">'.JText::_( $is_featured_only ? 'FLEXI_FEATURED' : 'FLEXI_TOTAL')."</span> "
+				.'<span class="flexi item_total_value">'.$fc_view_total." " .JText::_( $items_total_msg )."</span>"
+				.'<span class="flexi label item_total_label">'.JText::_( 'FLEXI_DISPLAYING')."</span> "
+				.'<span class="flexi item_total_value">'.$fromResult ." - " .$toResult ." " .JText::_( 'FLEXI_ITEM_S')."</span>"
 				;
-		} else {
-			$html .= "\n" . JText::_('JLIB_HTML_NO_RECORDS_FOUND');
 		}
-
+		
+		else
+		{
+			$html = "\n" . JText::_('JLIB_HTML_NO_RECORDS_FOUND');
+		}
+		
 		return $html;
 	}
 	
@@ -77,90 +91,21 @@ class FCPagination extends JPagination
 	 *
 	 * @since   11.1
 	 */
-	// ******************************************************************************************************
-	// CAUSES PROBLEM WITH SH404SEF as SH404SEF and other SEF components have custom pagination link creation
-	// ******************************************************************************************************
-	/*protected function _buildDataObject()
+	// **************************************************************************************************************************************
+	// Need to call parent function to avoid problems WITH SH404SEF as SH404SEF and other SEF components have custom pagination link creation
+	// **************************************************************************************************************************************
+	protected function _buildDataObject()
 	{
-		// Build the additional URL parameters string.
-		$params = '';
-		if (!empty($this->_additionalUrlParams))
-		{
-			foreach ($this->_additionalUrlParams as $key => $value)
-			{
-				$params .= '&' . $key . '=' . $value;
-			}
+		// Workaround for JRoute not allowing url-encoded ampersand %26 in values of variables
+		$data = parent::_buildDataObject();
+		if (!empty($data->pages)) foreach($data->pages as $i => $page) {
+			$page->link = str_replace('__amp__', '%26', $page->link);
 		}
-
-		// Initialise variables.
-		$data = new stdClass;
-		
-		$data->all = new JPaginationObject(JText::_('JLIB_HTML_VIEW_ALL'), $this->prefix);
-		if (!$this->_viewall)
-		{
-			$data->all->base = '0';
-			$data->all->link = JRoute::_($params . '&' . $this->prefix . 'limitstart=');
-		}
-
-		// Set the start and previous data objects.
-		$data->start = new JPaginationObject(JText::_('JLIB_HTML_START'), $this->prefix);
-		$data->previous = new JPaginationObject(JText::_('JPREV'), $this->prefix);
-
-		if ($this->get('pages.current') > 1)
-		{
-			$page = ($this->get('pages.current') - 2) * $this->limit;
-
-			// Set the empty for removal from route
-			//$page = $page == 0 ? '' : $page;
-			
-			$limistart_start_str = '&' . $this->prefix . 'limitstart=0';
-			$limistart_previous_str = '&' . $this->prefix . 'limitstart=' . $page;
-			$limit_str     = '&' . $this->prefix . 'limit=' . $this->limit;
-			
-			$data->start->base = '0';
-			$data->start->link = JRoute::_($params . $limistart_start_str);
-			$data->previous->base = $page;
-			$data->previous->link = JRoute::_($params . $limistart_previous_str . $limit_str );
-		}
-
-		// Set the next and end data objects.
-		$data->next = new JPaginationObject(JText::_('JNEXT'), $this->prefix);
-		$data->end = new JPaginationObject(JText::_('JLIB_HTML_END'), $this->prefix);
-
-		if ($this->get('pages.current') < $this->get('pages.total'))
-		{
-			$next = $this->get('pages.current') * $this->limit;
-			$end = ($this->get('pages.total') - 1) * $this->limit;
-			
-			$limistart_next_str = '&' . $this->prefix . 'limitstart=' . $next;
-			$limistart_end_str = '&' . $this->prefix . 'limitstart=' . $end;
-			$limit_str     = '&' . $this->prefix . 'limit=' . $this->limit;
-			
-			$data->next->base = $next;
-			$data->next->link = JRoute::_($params . $limistart_next_str  . $limit_str );
-			$data->end->base = $end;
-			$data->end->link = JRoute::_($params . $limistart_end_str . $limit_str );
-		}
-
-		$data->pages = array();
-		$stop = $this->get('pages.stop');
-		for ($i = $this->get('pages.start'); $i <= $stop; $i++)
-		{
-			$offset = ($i - 1) * $this->limit;
-			// Set the empty for removal from route
-			//$offset = $offset == 0 ? '' : $offset;
-
-			$data->pages[$i] = new JPaginationObject($i, $this->prefix);
-			if ($i != $this->get('pages.current') || $this->_viewall)
-			{
-				$limistart_str = '&' . $this->prefix . 'limitstart=' . $offset;
-				$limit_str     = '&' . $this->prefix . 'limit=' . $this->limit;
-				
-				$data->pages[$i]->base = $offset;
-				$data->pages[$i]->link = JRoute::_($params . $limistart_str . $limit_str );
-			}
-		}
+		if (!empty($data->start->link)) $data->start->link = str_replace('__amp__', '%26', $data->start->link);
+		if (!empty($data->end->link))   $data->end->link   = str_replace('__amp__', '%26', $data->end->link);
+		if (!empty($data->next->link))     $data->next->link     = str_replace('__amp__', '%26', $data->next->link);
+		if (!empty($data->previous->link)) $data->previous->link = str_replace('__amp__', '%26', $data->previous->link);
 		return $data;
-	}*/
+	}
 	
 }

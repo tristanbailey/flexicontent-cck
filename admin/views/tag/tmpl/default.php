@@ -19,13 +19,14 @@
 defined('_JEXEC') or die('Restricted access');
 ?>
 
-<form action="index.php" method="post" name="adminForm" id="adminForm">
+<div id="flexicontent" class="flexicontent">
+<form action="index.php" method="post" name="adminForm" id="adminForm" class="form-validate">
 
-	<table class="admintable" cellspacing="0" cellpadding="0" border="0" width="100%">
+	<table class="fc-form-tbl">
 		<tr>
 			<td class="key">
-				<label>
-					<?php echo JText::_( 'FLEXI_ID' ).':'; ?>
+				<label class="label">
+					<?php echo JText::_( 'FLEXI_ID' ); ?>
 				</label>
 			</td>
 			<td>
@@ -33,26 +34,26 @@ defined('_JEXEC') or die('Restricted access');
 			</td>
 		</tr><tr>
 			<td class="key">
-				<label for="name">
-					<?php echo JText::_( 'FLEXI_TAG_NAME' ).':'; ?>
+				<label class="label" for="name">
+					<?php echo JText::_( 'FLEXI_TAG_NAME' ); ?>
 				</label>
 			</td>
 			<td>
-				<input id="name" name="name" class="required" value="<?php echo $this->row->name; ?>" size="50" maxlength="100" />
+				<input type="text" id="name" name="name" class="required input-xxlarge" value="<?php echo $this->row->name; ?>" size="200" maxlength="100" />
 			</td>
 		</tr><tr>
 			<td class="key">
-				<label for="alias">
-					<?php echo JText::_( 'FLEXI_ALIAS' ).':'; ?>
+				<label class="label" for="alias">
+					<?php echo JText::_( 'FLEXI_ALIAS' ); ?>
 				</label>
 			</td>
 			<td>
-				<input id="alias" name="alias" class="" value="<?php echo $this->row->alias; ?>" size="50" maxlength="100" />
+				<input type="text" id="alias" name="alias" class="input-xxlarge" value="<?php echo $this->row->alias; ?>" size="200" maxlength="100" />
 			</td>
 		</tr><tr>
 			<td class="key">
-				<label for="published">
-					<?php echo JText::_( 'FLEXI_PUBLISHED' ).':'; ?>
+				<label class="label">
+					<?php echo JText::_( 'FLEXI_PUBLISHED' ); ?>
 				</label>
 			</td>
 			<td>
@@ -75,13 +76,14 @@ defined('_JEXEC') or die('Restricted access');
 		</tr>
 	</table>
 
-<?php echo JHTML::_( 'form.token' ); ?>
-<input type="hidden" name="option" value="com_flexicontent" />
-<input type="hidden" name="id" value="<?php echo $this->row->id; ?>" />
-<input type="hidden" name="controller" value="tags" />
-<input type="hidden" name="view" value="tag" />
-<input type="hidden" name="task" value="" />
+	<?php echo JHTML::_( 'form.token' ); ?>
+	<input type="hidden" name="option" value="com_flexicontent" />
+	<input type="hidden" name="id" value="<?php echo $this->row->id; ?>" />
+	<input type="hidden" name="controller" value="tags" />
+	<input type="hidden" name="view" value="tag" />
+	<input type="hidden" name="task" value="" />
 </form>
+</div>
 
 <?php
 //keep session alive while editing

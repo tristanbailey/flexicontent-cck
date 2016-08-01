@@ -14,10 +14,10 @@
  */
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-//jimport('joomla.plugin.plugin');
-jimport('joomla.event.plugin');
+jimport('cms.plugin.plugin');
+JLoader::register('FCField', JPATH_ADMINISTRATOR . '/components/com_flexicontent/helpers/fcfield/parentfield.php');
 
-class plgFlexicontent_fieldsFcpagenav extends JPlugin
+class plgFlexicontent_fieldsFcpagenav extends FCField
 {
 	static $field_types = array('fcpagenav');
 	
@@ -25,7 +25,7 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 	// CONSTRUCTOR
 	// ***********
 	
-	function plgFlexicontent_fieldsFcpagenav( &$subject, $params )
+	function __construct( &$subject, $params )
 	{
 		parent::__construct( $subject, $params );
 		JPlugin::loadLanguage('plg_flexicontent_fields_fcpagenav', JPATH_ADMINISTRATOR);
@@ -40,7 +40,6 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 	// Method to create field's HTML display for item form
 	function onDisplayField(&$field, &$item)
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 	}
 	
@@ -48,18 +47,23 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 	// Method to create field's HTML display for frontend views
 	function onDisplayFieldValue(&$field, $item, $values=null, $prop='display')
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		$field->{$prop} = '';
 		
+		global $globalcats;
+		$app  = JFactory::getApplication();
+		$db   = JFactory::getDBO();
+		$user = JFactory::getUser();
 		$option = JRequest::getCmd('option');
-		$view  = JRequest::getString('view', FLEXI_ITEMVIEW);
-		$print = JRequest::getCMD('print');
+		$view   = JRequest::getString('view', FLEXI_ITEMVIEW);
+		$print  = JRequest::getCMD('print');
+		$add_tooltips = JComponentHelper::getParams('com_flexicontent')->get('add_tooltips', 1);
 		
 		// No output if it is not FLEXIcontent item view or view is "print"
 		if ($view != FLEXI_ITEMVIEW || $option != 'com_flexicontent' || $print) return;
 		
 		// parameters shortcuts
+		$tooltip_class = 'hasTooltip';
 		$load_css 			= $field->parameters->get('load_css', 1);
 		$use_tooltip		= $field->parameters->get('use_tooltip', 1);
 		$use_title			= $field->parameters->get('use_title', 0);
@@ -71,25 +75,50 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 		$next_label			= JText::_($field->parameters->get('next_label', 'FLEXI_FIELDS_PAGENAV_GOTONEXT'));
 		$category_label	= JText::_($field->parameters->get('category_label', 'FLEXI_FIELDS_PAGENAV_CATEGORY'));
 		
+		$field->{$prop} = null;
 		$cid = JRequest::getInt('cid');
-		$cid = $cid ? $cid : (int)$item->catid;
+		$cid = !$cid || !isset($globalcats[$cid])  ?  (int)$item->catid  :  $cid;
 		
-		// Get active category parameters
-		$db = JFactory::getDBO();
+		$item_count = $app->getUserState( $option.'.'.$cid.'nav_item_count', 0);
+		$loc_to_ids = $app->getUserState( $option.'.'.$cid.'nav_loc_to_ids', array());
+		$ids_to_loc = array_flip($loc_to_ids);
+		
+		
+		// Get category parameters
 		$query 	= 'SELECT * FROM #__categories WHERE id = ' . $cid;
 		$db->setQuery($query);
-		$catdata = $db->loadObject();
-		$catdata->parameters = FLEXI_J16GE ? new JRegistry($catdata->params) : new JParameter($catdata->params);
+		$category = $db->loadObject();
+		$category->parameters = new JRegistry($category->params);
 		
-		// Get list of ids of selected, TODO retrieve item ids from view:
-		// --> this will allow special navigating layouts "mcats,author,myitems,tags,favs" and also utilize current filtering
-		$ids = null;
-		$list = $this->getItemList($field, $item, $ids, $cid, $catdata->parameters);
 		
-		// Location of current content item in array list
-		$loc_to_ids = array_keys($list);
-		$ids_to_loc = array_flip($loc_to_ids);
-		$location = isset($ids_to_loc[$item->id]) ? $ids_to_loc[$item->id] : false;
+		if ( isset($ids_to_loc[$item->id]) )
+		{
+			$location = $ids_to_loc[$item->id];
+		}
+		
+		else {
+			// Get list of ids of selected, null indicates to return item ids array. TODO retrieve item ids from view: 
+			// This will allow special navigating layouts "mcats,author,myitems,tags,favs" and also utilize current filtering
+			$ids = null;
+			$loc_to_ids = $this->getItemList($ids, $cid, $user->id);
+			
+			$ids_to_loc = array_flip($loc_to_ids);  // Item ID to location MAP
+			$item_count = count($loc_to_ids);    // Total items in category
+			$location   = isset($ids_to_loc[$item->id]) ? $ids_to_loc[$item->id] : false;  // Location of current content item in array list
+			
+			if ($location!==false) {
+				$offset = $location-50 > 0 ? $location-50 : 0;
+				$length = $offset+100 < $item_count ? 100 : $item_count-$offset;
+				$nav_loc_to_ids = array_slice( $loc_to_ids, $offset, $length, true);
+				
+				$app->setUserState( $option.'.'.$cid.'nav_item_count', $item_count);
+				$app->setUserState( $option.'.'.$cid.'nav_loc_to_ids', $nav_loc_to_ids);
+			}
+			else {
+				$app->setUserState( $option.'.'.$cid.'nav_item_count', null);
+				$app->setUserState( $option.'.'.$cid.'nav_loc_to_ids', null);
+			}
+		}
 		
 		// Get previous and next item data
 		$field->prev = null;
@@ -109,7 +138,7 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 		if ($location !== false)
 		{
 			$prev_id = ($location - 1) >= 0 ? $loc_to_ids[$location - 1] : null;
-			$next_id = ($location + 1) < count($list) ? $loc_to_ids[$location + 1] : null;
+			$next_id = ($location + 1) < $item_count ? $loc_to_ids[$location + 1] : null;
 			
 			$ids = array();
 			
@@ -123,20 +152,20 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 			if ($next_id) $ids[] = $next_id;
 			
 			// Query specific ids
-			$rows = $this->getItemList($field, $item, $ids, $cid, $catdata->parameters);
+			$rows = $this->getItemList($ids, $cid, $user->id);
 			
 			// previous content item
 			if ($prev_id) {
 				$field->prev = $rows[$prev_id];
 				$field->prevtitle = $field->prev->title;
-				$field->prevurl = JRoute::_(FlexicontentHelperRoute::getItemRoute($field->prev->slug, $field->prev->categoryslug));
+				$field->prevurl = JRoute::_(FlexicontentHelperRoute::getItemRoute($field->prev->slug, $field->prev->categoryslug, 0, $field->prev));
 			}
 			
 			// next content item
 			if ($next_id) {
 				$field->next = $rows[$next_id];
 				$field->nexttitle = $field->next->title;
-				$field->nexturl = JRoute::_(FlexicontentHelperRoute::getItemRoute($field->next->slug, $field->next->categoryslug));
+				$field->nexturl = JRoute::_(FlexicontentHelperRoute::getItemRoute($field->next->slug, $field->next->categoryslug, 0, $field->next));
 			}
 		}
 		
@@ -144,88 +173,37 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 		// Check if displaying nothing and stop
 		if (!$field->prev && !$field->next && !$use_category_link) return;
 		
-		$html = '<span class="flexi pagination">';
-		$tooltip_class = FLEXI_J30GE ? ' hasTooltip' : ' hasTip';
-		
-		// CATEGORY back link
-		if ($use_category_link)
-		{
-			$cat_image = $this->getCatThumb($catdata, $field->parameters);
-			$limit = count($list);
-			$limit = $limit ? $limit : 10;
-			$start = floor($location / $limit)*$limit;
-			if (!empty($rows[$item->id]->categoryslug)) {
-				$html .= '
-				<span class="return_category">
-					<a class="btn" href="'. JRoute::_(FlexicontentHelperRoute::getCategoryRoute($rows[$item->id]->categoryslug)).'?start='.$start .'">' . htmlspecialchars($category_label, ENT_NOQUOTES)
-					.($cat_image ? '<br/><img src="'.$cat_image.'"/>' : '') .'
-					</a>
-				</span>';
-			}
-		}
-		
-		// Item location and total count
-		$html .= $show_prevnext_count ? '<span class="prevnext_count">['.($location+1).'/'.count($list).']</span>' : '';
-		
 		// Get images
 		$items_arr = array();
 		if ($field->prev) $items_arr[$field->prev->id] = $field->prev;
 		if ($field->next) $items_arr[$field->next->id] = $field->next;
-		$thumbs = $this->getItemThumbs($field->parameters, $items_arr);
 		
-		// Next item linking
-		if ($field->prev)
-		{
-			$tooltip = $use_tooltip ? ' title="'. flexicontent_html::getToolTip($tooltip_title_prev, $field->prevtitle, 0) .'"' : '';
-			$html .= '
-			<span class="pagenav_prev' . ($use_tooltip ? $tooltip_class : '') . '" ' . ($use_tooltip ? $tooltip : '') . '>
-				<a class="btn" href="'. $field->prevurl .'">' . ( $use_title ? $field->prevtitle : htmlspecialchars($prev_label, ENT_NOQUOTES) )
-				.(isset($thumbs[$field->prev->id]) ? '<br/><img src="'.$thumbs[$field->prev->id].'"/>' : '') .'
-				</a>
-			</span>'
-			;
-		} else {
-			$html .= '
-			<span class="pagenav_prev">
-				<span class="noprevnext">'.htmlspecialchars($prev_label, ENT_NOQUOTES).'</span>
-			</span>'
-			;
-		}
+		$img_err_msg = '';
+		$thumbs = $this->getItemThumbs($field->parameters, $items_arr, $img_err_msg, $uprefix='item', $rprefix='nav');
 		
-		// Previous item linking
-		if ($field->next)
-		{
-			$tooltip = $use_tooltip ? ' title="'. flexicontent_html::getToolTip($tooltip_title_next, $field->nexttitle, 0) .'"' : '';
-			$html .= '
-			<span class="pagenav_next' . ($use_tooltip ? $tooltip_class : '') . '" ' . ($use_tooltip ? $tooltip : '') . '>
-				<a class="btn" href="'. $field->nexturl .'">' . ( $use_title ? $field->nexttitle : htmlspecialchars($next_label, ENT_NOQUOTES) ) 
-				.(isset($thumbs[$field->next->id]) ? '<br/><img src="'.$thumbs[$field->next->id].'"/>' : '') .'
-				</a>
-			</span>'
-			;
-		} else {
-			$html .= '
-			<span class="pagenav_next">
-				<span class="noprevnext">'.htmlspecialchars($next_label, ENT_NOQUOTES).'</span>
-			</span>'
-			;
-		}
+		$field->prevThumb = $field->prev && isset($thumbs[$field->prev->id]) ? $thumbs[$field->prev->id] : '';
+		$field->nextThumb = $field->next && isset($thumbs[$field->next->id]) ? $thumbs[$field->next->id] : '';
 		
-		$html .= '</span>';
+		// Get layout name
+		$viewlayout = $field->parameters->get('viewlayout', '');
+		$viewlayout = $viewlayout ? 'value_'.$viewlayout : 'value_default';
+		
+		include(self::getViewPath($this->fieldtypes[0], $viewlayout));
+		
 		
 		// Load needed JS/CSS
-		if ($use_tooltip)
-			JHTML::_('behavior.tooltip');
+		if ($add_tooltips && $use_tooltip)
+			JHtml::_('bootstrap.tooltip');
 		if ($load_css)
 			JFactory::getDocument()->addStyleSheet(JURI::root(true).'/plugins/flexicontent_fields/fcpagenav/'.(FLEXI_J16GE ? 'fcpagenav/' : '').'fcpagenav.css');	
 		
-		$field->{$prop} = $html;		
+		$field->{$prop} = $html;
 	}
 	
 	
-	function getItemThumbs(&$params, &$items, $uprefix='item', $rprefix='nav')
+	function getItemThumbs(&$params, &$items, & $img_err_msg, $uprefix='item', $rprefix='nav')
 	{
-		if ( !$params->get($uprefix.'_use_image', 1) ) return array();
+		if ( !$params->get($uprefix.'_use_image', 0) ) return array();
 		if ( empty($items) ) return array();
 		
 		if ( $params->get($uprefix.'_image') ) {
@@ -234,20 +212,26 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 			$img_field_name = $params->get($uprefix.'_image');
 		}
 		
-		if (!empty($img_field_name)) {
-			//$_return = FlexicontentFields::renderFields( false, array_keys($items), array($img_field_name), FLEXI_ITEMVIEW, array('display_'.$img_field_size.'_src'));
+		if (!empty($img_field_name))
+		{
 			FlexicontentFields::getFieldDisplay($items, $img_field_name, $values=null, 'display_'.$img_field_size.'_src', FLEXI_ITEMVIEW);
 		}
 		
 		$thumbs = array();
-		foreach($items as $item_id => $item) {
-			if (!empty($img_field_name)) :
-				//$src = str_replace(JURI::root(), '', @ $_return[$item_id][$img_field_name] );
-				$img_field = & $item->fields[$img_field_name];
-				$src = str_replace(JURI::root(), '', @ $img_field->{'display_'.$img_field_size.'_src'});
-			else :
+		foreach($items as $item_id => $item)
+		{
+			if ( !empty($img_field_name) ) {
+				$src = '';
+				// This is not set when image field is not assigned to the item type
+				if ( !empty($item->fields[$img_field_name]) )
+				{
+					$img_field = $item->fields[$img_field_name];
+					$src = str_replace(JURI::root(), '', @ $img_field->{'display_'.$img_field_size.'_src'});
+				}
+			}
+			else {
 				$src = flexicontent_html::extractimagesrc($item);
-			endif;
+			}
 				
 			$RESIZE_FLAG = !$params->get($uprefix.'_image') || !$params->get($uprefix.'_image_size');
 			if ( $src && $RESIZE_FLAG ) {
@@ -256,10 +240,11 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 				$h		= '&amp;h=' . $params->get($rprefix.'_height', 200);
 				$aoe	= '&amp;aoe=1';
 				$q		= '&amp;q=95';
+				$ar 	= '&amp;ar=x';
 				$zc		= $params->get($rprefix.'_method') ? '&amp;zc=' . $params->get($rprefix.'_method') : '';
-				$ext = pathinfo($src, PATHINFO_EXTENSION);
+				$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 				$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-				$conf	= $w . $h . $aoe . $q . $zc . $f;
+				$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 				
 				$base_url = (!preg_match("#^http|^https|^ftp|^/#i", $src)) ?  JURI::base(true).'/' : '';
 				$thumb = JURI::base(true).'/components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$base_url.$src.$conf;
@@ -275,7 +260,7 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 	
 	function getCatThumb(&$cat, &$params, $uprefix='cat', $rprefix='nav')
 	{
-		if ( empty($cat->id) || !$params->get($uprefix.'_use_image', 1) ) return '';
+		if ( empty($cat->id) || !$params->get($uprefix.'_use_image', 0) ) return '';
 		
 		// Joomla media folder
 		$app = JFactory::getApplication();
@@ -286,7 +271,7 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 		
 		$cat_image_source = $params->get($uprefix.'_image_source');
 		
-		$cat->image = FLEXI_J16GE ? $cat->parameters->get('image') : $cat->image;
+		$cat->image = $cat->parameters->get('image');
 		$image_src = "";
 		$cat->introtext = & $cat->description;
 		$cat->fulltext = "";
@@ -298,10 +283,11 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 			$h		= '&amp;h=' . $params->get($rprefix.'_height', 200);
 			$aoe	= '&amp;aoe=1';
 			$q		= '&amp;q=95';
+			$ar 	= '&amp;ar=x';
 			$zc		= $params->get($rprefix.'_method') ? '&amp;zc=' . $params->get($rprefix.'_method') : '';
-			$ext = pathinfo($src, PATHINFO_EXTENSION);
+			$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 			$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-			$conf	= $w . $h . $aoe . $q . $zc . $f;
+			$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 			
 			$image_src = JURI::base(true).'/components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$src.$conf;
 		} else if ( $cat_image_source!=1 && $src = flexicontent_html::extractimagesrc($cat) ) {
@@ -310,10 +296,11 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 			$h		= '&amp;h=' . $params->get($rprefix.'_height', 200);
 			$aoe	= '&amp;aoe=1';
 			$q		= '&amp;q=95';
+			$ar 	= '&amp;ar=x';
 			$zc		= $params->get($rprefix.'_method') ? '&amp;zc=' . $params->get($rprefix.'_method') : '';
-			$ext = pathinfo($src, PATHINFO_EXTENSION);
+			$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 			$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-			$conf	= $w . $h . $aoe . $q . $zc . $f;
+			$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 			
 			$base_url = (!preg_match("#^http|^https|^ftp|^/#i", $src)) ?  JURI::base(true).'/' : '';
 			$image_src = JURI::base(true).'/components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$base_url.$src.$conf;
@@ -323,129 +310,143 @@ class plgFlexicontent_fieldsFcpagenav extends JPlugin
 	}
 	
 	
-	function getItemList(&$field, &$item, &$ids=null, $cid=null, &$cparams=null)
+	function getItemList(&$ids=null, $cid=null, &$userid=0)
 	{
-		// Global parameters
-		$gparams   = JFactory::getApplication()->getParams('com_flexicontent');
-		$filtercat = $gparams->get('filtercat', 0); // If language filtering is enabled in category view
-		
-		$db    = JFactory::getDBO();
-		$user  = JFactory::getUser();
-		$date     = JFactory::getDate();
-		$nowDate  = FLEXI_J16GE ? $date->toSql() : $date->toMySQL();
-		$nullDate	= $db->getNullDate();
+		$db = JFactory::getDBO();
 		
 		if ($ids===null)
 		{
-			$select = 'SELECT a.id';
-			$join = ''
-				. ' LEFT JOIN #__flexicontent_items_ext AS ie on ie.item_id = a.id'
-				. ' JOIN #__flexicontent_cats_item_relations AS rel ON rel.itemid = a.id '
-				;
+			require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'classes'.DS.'flexicontent.categories.php');
+			require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'models'.DS.'category.php');
 			
-			// Get the site default language in case no language is set in the url
-			$cntLang = substr(JFactory::getLanguage()->getTag(), 0,2);  // Current Content language (Can be natively switched in J2.5)
-			$urlLang  = JRequest::getWord('lang', '' );                 // Language from URL (Can be switched via Joomfish in J1.5)
-			$lang = (FLEXI_J16GE || empty($urlLang)) ? $cntLang : $urlLang;
+			$saved_cid = JRequest::getVar('cid', '');   // save cid ...
+			$saved_layout = JRequest::getVar('layout'); // save layout ...
+			$saved_option = JRequest::getVar('option'); // save option ...
+			$saved_view = JRequest::getVar('view'); // save layout ...
 			
-			// parameters shortcuts
-			$types_to_exclude	= $field->parameters->get('type_to_exclude', '');
+			//$target_layout = $mcats_selection || !$catid ? 'mcats' : '';
+			//JRequest::setVar('layout', $target_layout);
+			//JRequest::setVar($target_layout=='mcats' ? 'cids' : 'cid', $limit_filters_to_cat ? $catid : 0);
+			JRequest::setVar('layout', '');
+			JRequest::setVar('cid', $cid);
+			JRequest::setVar('option', 'com_flexicontent');
+			JRequest::setVar('view', 'category');
 			
-			// filter depending on permissions
-			if (FLEXI_J16GE) {
-				$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
-				$aid_list = implode(",", $aid_arr);
-				$andaccess = ' AND a.access IN ('.$aid_list.')';
-			} else {
-				$aid = (int) $user->get('aid');
-				if (FLEXI_ACCESS) {
-					$readperms = FAccess::checkUserElementsAccess($user->gmid, 'read');
-					if ( isset($readperms['item']) && count($readperms['item']) ) {
-						$andaccess = ' AND ( ( a.access <= '.$aid.' OR a.id IN ('.implode(",", $readperms['item']).') OR a.created_by = '.$user->id.' OR ( a.modified_by = '.$user->id.' AND a.modified_by != 0 ) ) )';
-					} else {
-						$andaccess = ' AND ( a.access <= '.$aid.' OR a.created_by = '.$user->id.' OR ( a.modified_by = '.$user->id.' AND a.modified_by != 0 ) )';
-					}
-				} else {
-					$andaccess = ' AND ( a.access <= '.$aid.' OR a.created_by = '.$user->id.' OR ( a.modified_by = '.$user->id.' AND a.modified_by != 0 ) )';
-				}
-			}
-	
-			// Determine sort order
-			$order = $cparams->get('orderby', '');    // TODO: finish using category ORDERING, now we ignore: commented, rated
-			$orderby = '';
-			$orderby_join = '';
-			if ((int)$cparams->get('orderbycustomfieldid', 0) != 0) {
-				if ($cparams->get('orderbycustomfieldint', 0) != 0) $int = ' + 0'; else $int ='';
-				$orderby		= 'f.value'.$int.' '.$cparams->get('orderbycustomfielddir', 'ASC');
-				$orderby_join = ' LEFT JOIN #__flexicontent_fields_item_relations AS f ON f.item_id = a.id AND f.field_id = '.(int)$cparams->get('orderbycustomfieldid', 0);
-			} else {
-				switch ($order)
-				{
-					case 'date'    : $orderby = 'a.created';  break;
-					case 'rdate'   : $orderby = 'a.created DESC';  break;
-					case 'modified': $orderby = 'a.modified DESC';  break;
-					case 'alpha'   : $orderby = 'a.title'; break;
-					case 'ralpha'  : $orderby = 'a.title DESC'; break;
-					case 'author'  : $orderby = 'u.name';  break;
-					case 'rauthor' : $orderby = 'u.name DESC';  break;
-					case 'hits'    : $orderby = 'a.hits';  break;
-					case 'rhits'   : $orderby = 'a.hits DESC';  break;
-					case 'order'   : $orderby = 'rel.ordering';  break;
-				}
-				
-				// Create JOIN for ordering items by a most rated
-				if ($order=='author' || $order=='rauthor') {
-					$orderby_join = ' LEFT JOIN #__users AS u ON u.id = a.created_by';
-				}
-			}
-			$orderby = $orderby ? $orderby.', a.title' : 'a.title';
-			$orderby = ' ORDER BY '.$orderby;
+			// Get/Create current category model ... according to configuaration set above into the JRequest variables ...
+			$catmodel = new FlexicontentModelCategory();
+			$category = $catmodel->getCategory($pk=null, $raiseErrors=false, $checkAccess=false);
 			
-			$types = is_array($types_to_exclude) ? implode(',', $types_to_exclude) : $types_to_exclude;
-	
-			$where  = ' WHERE rel.catid = ' . $cid;
-			$where .=	' AND ( a.state = 1 OR a.state = -5 )' .
-						' AND ( publish_up = '.$db->Quote($nullDate).' OR publish_up <= '.$db->Quote($nowDate).' )' .
-						' AND ( publish_down = '.$db->Quote($nullDate).' OR publish_down >= '.$db->Quote($nowDate).' )' . 
-						($types_to_exclude ? ' AND ie.type_id NOT IN (' . $types . ')' : '')
-						;
-			if ((FLEXI_FISH || FLEXI_J16GE) && $filtercat) {
-				$where .= ' AND ( ie.language LIKE ' . $db->Quote( $lang .'%' ) . (FLEXI_J16GE ? ' OR ie.language="*" ' : '') . ' ) ';
-			}
+			$query = $catmodel->_buildQuery(false, $count_total=false);
+			$db->setQuery($query, 0, 50000);
+			$list = $db->loadColumn();
+			$list = is_array($list) ? $list : array();
 			
+			// Restore variables
+			JRequest::setVar('cid', $saved_cid); // restore cid
+			JRequest::setVar('layout', $saved_layout); // restore layout
+			JRequest::setVar('option', $saved_option); // restore option
+			JRequest::setVar('view', $saved_view); // restore view
+			
+			return $list;
 		}
 		
-		// Retrieving specific item data
 		else {
-			$select = 'SELECT a.*, ie.*,'
-				. ' CASE WHEN CHAR_LENGTH(a.alias) THEN CONCAT_WS(":", a.id, a.alias) ELSE a.id END as slug,'
-				. ' CASE WHEN CHAR_LENGTH(cc.alias) THEN CONCAT_WS(":", cc.id, cc.alias) ELSE cc.id END as categoryslug'
-				;
-			$join = ' LEFT JOIN #__flexicontent_items_ext AS ie on ie.item_id = a.id'
-				.' JOIN #__categories AS cc ON cc.id = '. $cid;
-			$orderby = '';
-			$orderby_join = '';
-			$where = ' WHERE a.id IN ('. implode(',', $ids) .')';
-			$andaccess = '';
+			// Retrieving specific item data
+			$query 	= 'SELECT i.*, ie.*,'
+					. ' CASE WHEN CHAR_LENGTH(i.alias) THEN CONCAT_WS(":", i.id, i.alias) ELSE i.id END as slug,'
+					. ' CASE WHEN CHAR_LENGTH(cc.alias) THEN CONCAT_WS(":", cc.id, cc.alias) ELSE cc.id END as categoryslug'
+					. ' FROM #__content AS i'
+					. ' JOIN #__flexicontent_items_ext AS ie on ie.item_id = i.id'
+					. ' JOIN #__categories AS cc ON cc.id = '. $cid
+					. ' WHERE i.id IN ('. implode(',', $ids) .')';
+			$db->setQuery($query);
+			
+			try {
+				$list = $db->loadObjectList('id');
+			}
+			catch (Exception $e) {
+				if ($db->getErrorNum()) JError::raiseWarning($db->getErrorNum(), $db->getErrorMsg(). "<br />".$query."<br />");
+				return array();
+			}
+			
+			$list = is_array($list) ? $list : array();
+			return $list;
+		}
+	}
+	
+	
+	
+	/**
+	 * Retrieve subcategory ids of a given category
+	 *
+	 * @access public
+	 * @return string
+	 */
+	function &_getDataCats($id_arr, &$cparams)
+	{
+		global $globalcats;
+		$db   = JFactory::getDBO();
+		$user = JFactory::getUser();
+		$ordering = 'c.lft ASC';
+
+		$show_noauth = $cparams->get('show_noauth', 0);   // show unauthorized items
+		$display_subcats = $cparams->get('display_subcategories_items', 2);   // include subcategory items
+		
+		// Select only categories that user has view access, if listing of unauthorized content is not enabled
+		$joinaccess = '';
+		$andaccess = '';
+		if (!$show_noauth) {
+			$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
+			$aid_list = implode(",", $aid_arr);
+			$andaccess .= ' AND c.access IN (0,'.$aid_list.')';
 		}
 		
-		// array of articles in same category correctly ordered
-		$query 	= $select
-				. ' FROM #__content AS a'
-				. $join
-				. $orderby_join
-				. $where
-				. $andaccess
-				. $orderby
-				;
-		$db->setQuery($query);
-		$list = $db->loadObjectList('id');
-		if ($db->getErrorNum()) {
-			JError::raiseWarning($db->getErrorNum(), $db->getErrorMsg(). "<br />".$query."<br />");
+		// Calculate categories to use for retrieving items
+		$query_catids = array();
+		foreach ($id_arr as $id)
+		{
+			$query_catids[$id] = 1;
+			if ( $display_subcats==2 && !empty($globalcats[$id]->descendantsarray) ) {
+				foreach ($globalcats[$id]->descendantsarray as $subcatid) $query_catids[$subcatid] = 1;
+			}
 		}
-
-		// this check needed if incorrect Itemid is given resulting in an incorrect result
-		if ( !is_array($list) )  $list = array();
-		return $list;
+		$query_catids = array_keys($query_catids);
+		
+		// Items in featured categories
+		/*$cats_featured = $cparams->get('display_cats_featured', 0);
+		$featured_cats_parent = $cparams->get('featured_cats_parent', 0);
+		$query_catids_exclude = array();
+		if ($cats_featured && $featured_cats_parent) {
+			foreach ($globalcats[$featured_cats_parent]->descendantsarray as $subcatid) $query_catids_exclude[$subcatid] = 1;
+		}*/
+		
+		// filter by depth level
+		if ($display_subcats==0) {
+			// Include categories
+			$anddepth = ' AND c.id IN (' .implode(',', $query_catids). ')';
+		} else if ($display_subcats==1) {
+			// Include categories and their subcategories
+			$anddepth  = ' AND ( c.parent_id IN (' .implode(',', $query_catids). ')  OR  c.id IN (' .implode(',', $query_catids). ') )';
+		} else {
+			// Include categories and their descendants
+			$anddepth = ' AND c.id IN (' .implode(',', $query_catids). ')';
+		}
+		
+		// Finally create the query to get the category ids.
+		// NOTE: this query is not just needed to get 1st level subcats, but it always needed TO ALSO CHECK the ACCESS LEVEL
+		$query = 'SELECT c.id'
+			. ' FROM #__categories AS c'
+			. $joinaccess
+			. ' WHERE c.published = 1'
+			. $andaccess
+			. $anddepth
+			. ' ORDER BY '.$ordering
+			;
+		
+		$db->setQuery($query);
+		$this->_data_cats = $db->loadColumn();
+		if ($db->getErrorNum())  JFactory::getApplication()->enqueueMessage(__FUNCTION__.'(): SQL QUERY ERROR:<br/>'.nl2br($db->getErrorMsg()),'error');
+		
+		return $this->_data_cats;
 	}
 }

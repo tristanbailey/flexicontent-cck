@@ -24,6 +24,7 @@ defined('_JEXEC') or die('Restricted access');
  */
 jimport('joomla.database.tablenested');
 jimport('joomla.access.rules');
+use Joomla\String\StringHelper;
 
 class _flexicontent_categories_common extends JTableNested {
 	protected function __getAssetParentId(JTable $table = null, $id = null)
@@ -52,7 +53,7 @@ class _flexicontent_categories_common extends JTableNested {
 			$query	= $db->getQuery(true);
 			$query->select('id');
 			$query->from('#__assets');
-			$query->where('name= "com_flexicontent"');
+			$query->where('name= "com_content"');
 
 			// Get the asset id from the database.
 			$db->setQuery($query);
@@ -139,10 +140,11 @@ class flexicontent_categories extends _flexicontent_categories
 	/**
 	* @param database A database connector object
 	*/
-	function flexicontent_categories(& $db) {
+	function __construct(& $db) {
 		$this->extension = 'com_content';
 		parent::__construct('#__categories', 'id', $db);
 	}
+	
 	
 	/**
 	 * Method to compute the default name of the asset.
@@ -158,7 +160,8 @@ class flexicontent_categories extends _flexicontent_categories
 		$k = $this->_tbl_key;
 		return 'com_content.category.'.(int) $this->$k;
 	}
-
+	
+	
 	/**
 	 * Method to return the title to use for the asset table.
 	 *
@@ -170,7 +173,8 @@ class flexicontent_categories extends _flexicontent_categories
 	{
 		return $this->title;
 	}
-
+	
+	
 	/**
 	 * Get the parent asset id for the record
 	 *
@@ -194,10 +198,49 @@ class flexicontent_categories extends _flexicontent_categories
 	 */
 	function check()
 	{
-		// check for valid name
+		// check for empty title
 		if (trim( $this->title ) == '') {
 			$this->setError(JText::sprintf( 'must contain a title', JText::_( 'FLEXI_Category' ) ));
 			return false;
+		}
+		
+		// check for empty alias
+		if(empty($this->alias)) {
+			$this->alias = $this->title;
+		}
+		
+		
+		// FLAGs
+		$unicodeslugs = JFactory::getConfig()->get('unicodeslugs');
+		
+		$r = new ReflectionMethod('JApplicationHelper', 'stringURLSafe');
+		$supports_content_language_transliteration = count( $r->getParameters() ) > 1;
+		
+		
+		// workaround for old joomla versions (Joomla <=3.5.x) that do not allowing to set transliteration language to be element's language
+		if ( !$unicodeslugs && !$supports_content_language_transliteration )
+		{
+			// Use ITEM's language or use SITE's default language in case of ITEM's language is ALL (or empty)
+			$language = $this->language && $this->language != '*' ?
+				$this->language :
+				JComponentHelper::getParams('com_languages')->get('site', '*') ;
+			
+			// Remove any '-' from the string since they will be used as concatenaters
+			$this->alias = str_replace('-', ' ', $this->alias);
+			
+			// Do the transliteration accorting to ELEMENT's language
+			$this->alias = JLanguage::getInstance($language)->transliterate($this->alias);
+		}
+		
+		
+		// make alias safe and transliterate it
+		$this->alias = JApplicationHelper::stringURLSafe($this->alias, $this->language);
+		
+		
+		// check for empty alias and fallback to using current date
+		if (trim(str_replace('-', '', $this->alias)) == '')
+		{
+			$this->alias = JFactory::getDate()->format('Y-m-d-H-i-s');
 		}
 		
 		global $globalcats;
@@ -221,21 +264,7 @@ class flexicontent_categories extends _flexicontent_categories
 			$this->_error = JText::sprintf( 'WARNNAMETRYAGAIN', JText::_( 'FLEXI_Category' ) );
 			return false;
 		}*/
-
-		if(empty($this->alias)) {
-			$this->alias = $this->title;
-		}
-		$this->alias = FLEXI_J16GE ?
-			JApplication::stringURLSafe($this->alias) :
-			JFilterOutput::stringURLSafe($this->alias);
 		
-		if(trim(str_replace('-','',$this->alias)) == '') {
-			$datenow = JFactory::getDate();
-			$this->alias = FLEXI_J16GE ?
-				$datenow->format($format = 'Y-M-d-H-i-s', $local = true) :
-				$datenow->toFormat($format = '%Y-%m-%d-%H-%M-%S');
-		}
-
 		return true;
 	}
 	
@@ -332,7 +361,7 @@ class flexicontent_categories extends _flexicontent_categories
 				$query->where('id = '.(int) $this->id);
 				$this->_db->setQuery($query);
 				
-				if (!$this->_db->query()) {
+				if (!$this->_db->execute()) {
 					$e = new JException(JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED_UPDATE_ASSET_ID', $this->_db->getErrorMsg()));
 					$this->setError($e);
 					return false;
@@ -350,8 +379,8 @@ class flexicontent_categories extends _flexicontent_categories
 				. ' WHERE id = ' . (int)$this->id;
 				;
 			$this->_db->setQuery($query);
-			$this->_db->query();
-			if (!$this->_db->query()) {
+			$this->_db->execute();
+			if (!$this->_db->execute()) {
 				$e = new JException(JText::sprintf($this->_db->getErrorMsg()));
 				$this->setError($e);
 				return false;

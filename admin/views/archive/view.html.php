@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
+use Joomla\String\StringHelper;
 
 /**
  * View class for the FLEXIcontent Archive screen
@@ -39,20 +40,37 @@ class FlexicontentViewArchive extends JViewLegacy
 		$db       = JFactory::getDBO();
 		$document	= JFactory::getDocument();
 		
-		JHTML::_('behavior.tooltip');
 
 		//get vars
 		$filter_order		= $mainframe->getUserStateFromRequest( $option.'.archive.filter_order', 		'filter_order', 	'i.ordering', 'cmd' );
 		$filter_order_Dir	= $mainframe->getUserStateFromRequest( $option.'.archive.filter_order_Dir',	'filter_order_Dir',	'', 'word' );
 		$search 			= $mainframe->getUserStateFromRequest( $option.'.archive.search', 			'search', 			'', 'string' );
-		$search 			= FLEXI_J16GE ? $db->escape( trim(JString::strtolower( $search ) ) ) : $db->getEscaped( trim(JString::strtolower( $search ) ) );
-
-		//add css and submenu to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
+		$search 			= $db->escape( StringHelper::trim(StringHelper::strtolower( $search ) ) );
+		
+		
+		
+		// **************************
+		// Add css and js to document
+		// **************************
+		
+		//JHTML::_('behavior.tooltip');
+		
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
+		
+		
+		// *****************************
+		// Get user's global permissions
+		// *****************************
+		
 		$perms = FlexicontentHelperPerm::getPerm();
+		
+		
+		
+		// ************************
+		// Create Submenu & Toolbar
+		// ************************
 		
 		// Create Submenu (and also check access to current view)
 		FLEXISubmenu('CanArchives');
@@ -77,8 +95,8 @@ class FlexicontentViewArchive extends JViewLegacy
 		}
 
 		//Get data from the model
-		$rows			= & $this->get( 'Data');
-		$pageNav	= & $this->get( 'Pagination' );
+		$rows			= $this->get( 'Data');
+		$pageNav	= $this->get( 'Pagination' );
 		
 		// search filter
 		$lists['search']= $search;
@@ -96,6 +114,7 @@ class FlexicontentViewArchive extends JViewLegacy
 		$this->assignRef('ordering'		, $ordering);
 		$this->assignRef('user'				, $user);
 
+		$this->sidebar = FLEXI_J30GE ? JHtmlSidebar::render() : null;
 		parent::display($tpl);
 	}
 }

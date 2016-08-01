@@ -14,9 +14,10 @@
  */
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.event.plugin');
+jimport('cms.plugin.plugin');
+JLoader::register('FCField', JPATH_ADMINISTRATOR . '/components/com_flexicontent/helpers/fcfield/parentfield.php');
 
-class plgFlexicontent_fieldsText extends JPlugin
+class plgFlexicontent_fieldsText extends FCField
 {
 	static $field_types = array('text', 'textselect');
 	
@@ -24,7 +25,7 @@ class plgFlexicontent_fieldsText extends JPlugin
 	// CONSTRUCTOR
 	// ***********
 	
-	function plgFlexicontent_fieldsText( &$subject, $params )
+	function __construct( &$subject, $params )
 	{
 		parent::__construct( $subject, $params );
 		JPlugin::loadLanguage('plg_flexicontent_fields_text', JPATH_ADMINISTRATOR);
@@ -39,152 +40,224 @@ class plgFlexicontent_fieldsText extends JPlugin
 	// Method to create field's HTML display for item form
 	function onDisplayField(&$field, &$item)
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		$field->label = JText::_($field->label);
+		$use_ingroup = $field->parameters->get('use_ingroup', 0);
+		if ($use_ingroup) $field->formhidden = 3;
+		if ($use_ingroup && empty($field->ingroup)) return;
 		
 		// initialize framework objects and other variables
-		$document  = JFactory::getDocument();
+		$document = JFactory::getDocument();
+		$cparams  = JComponentHelper::getParams( 'com_flexicontent' );
 		
-		// some parameter shortcuts
-		$default_value_use = $field->parameters->get( 'default_value_use', 0 ) ;
-		$default_value     = ($item->version == 0 || $default_value_use > 0) ? $field->parameters->get( 'default_value', '' ) : '';
-		$maxlength	= (int)$field->parameters->get( 'maxlength', 0 ) ;
-		$size       = (int) $field->parameters->get( 'size', 30 ) ;
-		$multiple   = $field->parameters->get( 'allow_multiple', 1 ) ;
-		$max_values = (int) $field->parameters->get( 'max_values', 0 ) ;
+		$tooltip_class = 'hasTooltip';
+		$add_on_class    = $cparams->get('bootstrap_ver', 2)==2  ?  'add-on' : 'input-group-addon';
+		$input_grp_class = $cparams->get('bootstrap_ver', 2)==2  ?  'input-append input-prepend' : 'input-group';
+		
+		
+		// ****************
+		// Number of values
+		// ****************
+		$multiple   = $use_ingroup || (int) $field->parameters->get( 'allow_multiple', 0 ) ;
+		$max_values = $use_ingroup ? 0 : (int) $field->parameters->get( 'max_values', 0 ) ;
 		$required   = $field->parameters->get( 'required', 0 ) ;
 		$required   = $required ? ' required' : '';
+		$add_position = (int) $field->parameters->get( 'add_position', 3 ) ;
 		
-	  // add setMask function on the document.ready event
+		
+		// **************
+		// Value handling
+		// **************
+		
+		// Default value
+		$value_usage   = $field->parameters->get( 'default_value_use', 0 ) ;
+		$default_value = ($item->version == 0 || $value_usage > 0) ? $field->parameters->get( 'default_value', '' ) : '';
+		$default_value = $default_value ? JText::_($default_value) : '';
+		$default_values= array($default_value);
+		
+		// Input field display size & max characters
+		$size       = (int) $field->parameters->get( 'size', 30 ) ;
+		$maxlength  = (int) $field->parameters->get( 'maxlength', 0 ) ;   // client/server side enforced
+		$display_label_form = (int) $field->parameters->get( 'display_label_form', 1 ) ;
+		$placeholder= $display_label_form==-1 ? $field->label : JText::_($field->parameters->get( 'placeholder', '' )) ;
+		
+		// create extra HTML TAG parameters for the form field
+		$attribs = $field->parameters->get( 'extra_attributes', '' ) ;
+		if ($maxlength) $attribs .= ' maxlength="'.$maxlength.'" ';
+		if (!empty($default_values)) $attribs .= ' data-defvals="'.htmlspecialchars( implode('|||', $default_values), ENT_COMPAT, 'UTF-8' ).'" ';
+		$attribs .= ' size="'.$size.'" ';
+		
+		// Custom HTML placed before / after form fields
+		$pretext  = $field->parameters->get( 'pretext_form', '' ) ;
+		$posttext = $field->parameters->get( 'posttext_form', '' ) ;
+		
+		
+		// **********************
+	  // Create validation mask
+		// **********************
 		$inputmask	= $field->parameters->get( 'inputmask', false ) ;
 		$custommask = $field->parameters->get( 'custommask', false ) ;
+		$regexmask  = $field->parameters->get( 'regexmask', false ) ;
+		
 		static $inputmask_added = false;
 	  if ($inputmask && !$inputmask_added) {
 			$inputmask_added = true;
 			flexicontent_html::loadFramework('inputmask');
 		}
 		
-		// create extra HTML TAG parameters for the text form field
-		$attribs = $field->parameters->get( 'extra_attributes', '' ) ;
-		if ($maxlength) $attribs .= ' maxlength="'.$maxlength.'" ';
-		
 		// Initialise property with default value
-		if ( !$field->value ) {
-			$field->value = array();
-			$field->value[0] = JText::_($default_value);
-		} else {
-			for ($n=0; $n<count($field->value); $n++) {
-				$field->value[$n] = htmlspecialchars( $field->value[$n], ENT_QUOTES, 'UTF-8' );
-			}
+		if ( !$field->value || (count($field->value)==1 && $field->value[0] === null) ) {
+			$field->value = $default_values;
 		}
 		
+		// CSS classes of value container
+		$value_classes  = 'fcfieldval_container valuebox fcfieldval_container_'.$field->id;
+		
 		// Field name and HTML TAG id
-		$fieldname = FLEXI_J16GE ? 'custom['.$field->name.'][]' : $field->name.'[]';
-		$elementid = FLEXI_J16GE ? 'custom_'.$field->name : $field->name;
+		$fieldname = 'custom['.$field->name.']';
+		$elementid = 'custom_'.$field->name;
 		
 		$js = "";
+		$css = "";
 		
 		if ($multiple) // handle multiple records
 		{
-			if (!FLEXI_J16GE) $document->addScript( JURI::root(true).'/components/com_flexicontent/assets/js/sortables.js' );
-			
 			// Add the drag and drop sorting feature
-			$js .= "
+			if (!$use_ingroup) $js .= "
 			jQuery(document).ready(function(){
 				jQuery('#sortables_".$field->id."').sortable({
-					handle: '.fcfield-drag',
+					handle: '.fcfield-drag-handle',
 					containment: 'parent',
 					tolerance: 'pointer'
 				});
 			});
 			";
 			
-			if ($max_values) FLEXI_J16GE ? JText::script("FLEXI_FIELD_MAX_ALLOWED_VALUES_REACHED", true) : fcjsJText::script("FLEXI_FIELD_MAX_ALLOWED_VALUES_REACHED", true);
+			if ($max_values) JText::script("FLEXI_FIELD_MAX_ALLOWED_VALUES_REACHED", true);
 			$js .= "
 			var uniqueRowNum".$field->id."	= ".count($field->value).";  // Unique row number incremented only
 			var rowCount".$field->id."	= ".count($field->value).";      // Counts existing rows to be able to limit a max number of values
 			var maxValues".$field->id." = ".$max_values.";
-
-			function addField".$field->id."(el) {
+			
+			function addField".$field->id."(el, groupval_box, fieldval_box, params)
+			{
+				var insert_before   = (typeof params!== 'undefined' && typeof params.insert_before   !== 'undefined') ? params.insert_before   : 0;
+				var remove_previous = (typeof params!== 'undefined' && typeof params.remove_previous !== 'undefined') ? params.remove_previous : 0;
+				var scroll_visible  = (typeof params!== 'undefined' && typeof params.scroll_visible  !== 'undefined') ? params.scroll_visible  : 1;
+				var animate_visible = (typeof params!== 'undefined' && typeof params.animate_visible !== 'undefined') ? params.animate_visible : 1;
+				
 				if((rowCount".$field->id." >= maxValues".$field->id.") && (maxValues".$field->id." != 0)) {
 					alert(Joomla.JText._('FLEXI_FIELD_MAX_ALLOWED_VALUES_REACHED') + maxValues".$field->id.");
 					return 'cancel';
 				}
 				
-				var thisField 	 = jQuery(el).prev().children().last();
-				var thisNewField = thisField.clone();
-				
-				jQuery(thisNewField).find('input').first().val('');  /* First element is the value input field, second is e.g remove button */
-
-				var has_inputmask = jQuery(thisNewField).find('input.has_inputmask').length != 0;
-				if (has_inputmask)  jQuery(thisNewField).find('input.has_inputmask').inputmask();
-				
-				var has_select2 = jQuery(thisNewField).find('div.select2-container').length != 0;
-				if (has_select2) {
-					jQuery(thisNewField).find('div.select2-container').remove();
-					jQuery(thisNewField).find('select.use_select2_lib').select2();
-				}
-				
-				jQuery(thisNewField).css('display', 'none');
-				jQuery(thisNewField).insertAfter( jQuery(thisField) );
-
-				var input = jQuery(thisNewField).find('input').first();
-				input.attr('id', '".$elementid."_'+uniqueRowNum".$field->id.");
+				// Find last container of fields and clone it to create a new container of fields
+				var lastField = fieldval_box ? fieldval_box : jQuery(el).prev().children().last();
+				var newField  = lastField.clone();
 				";
 			
-			if ($field->field_type=='textselect') $js .= "
-				thisNewField.parent().find('select.fcfield_textselval').val('');
-				";
-			
+			// NOTE: HTML tag id of this form element needs to match the -for- attribute of label HTML tag of this FLEXIcontent field, so that label will be marked invalid when needed
+			// Update the new text field
 			$js .= "
-				jQuery('#sortables_".$field->id."').sortable({
-					handle: '.fcfield-drag',
-					containment: 'parent',
-					tolerance: 'pointer'
-				});
+				var theInput = newField.find('input.fcfield_textval').first();
+				var theInput_dv = theInput.attr('data-defvals');
+				(theInput_dv && theInput_dv.length) ?
+					theInput.val( theInput.attr('data-defvals') ) :
+					theInput.val('') ;
+				theInput.attr('name', '".$fieldname."['+uniqueRowNum".$field->id."+']');
+				theInput.attr('id', '".$elementid."_'+uniqueRowNum".$field->id.");
 				
-				jQuery(thisNewField).show('slideDown');
+				// Update inputmask
+				var has_inputmask = newField.find('input.has_inputmask').length != 0;
+				if (has_inputmask)  newField.find('input.has_inputmask').inputmask();
+				
+				// Re-init any select2 elements
+				var has_select2 = newField.find('div.select2-container').length != 0;
+				if (has_select2) {
+					newField.find('div.select2-container').remove();
+					newField.find('select.use_select2_lib').select2('destroy').show().select2();
+				}
+				";
+			
+			// Update select for textselect if it exists
+			if ($field->field_type=='textselect')
+				$js .= "
+				newField.parent().find('select.fcfield_textselval').val('');
+				";
+			
+			// Add new field to DOM
+			$js .= "
+				lastField ?
+					(insert_before ? newField.insertBefore( lastField ) : newField.insertAfter( lastField ) ) :
+					newField.appendTo( jQuery('#sortables_".$field->id."') ) ;
+				if (remove_previous) lastField.remove();
+				";
+			
+			// Add new element to sortable objects (if field not in group)
+			if (!$use_ingroup) $js .= "
+				//jQuery('#sortables_".$field->id."').sortable('refresh');  // Refresh was done appendTo ?
+				";
+			
+			// Show new field, increment counters
+			$js .="
+				//newField.fadeOut({ duration: 400, easing: 'swing' }).fadeIn({ duration: 200, easing: 'swing' });
+				if (scroll_visible) fc_scrollIntoView(newField, 1);
+				if (animate_visible) newField.css({opacity: 0.1}).animate({ opacity: 1 }, 800);
+				
+				// Enable tooltips on new element
+				newField.find('.hasTooltip').tooltip({'html': true,'container': newField});
+
+				// Attach form validation on new element
+				fc_validationAttach(newField);
 				
 				rowCount".$field->id."++;       // incremented / decremented
 				uniqueRowNum".$field->id."++;   // incremented only
 			}
 
-			function deleteField".$field->id."(el)
+			function deleteField".$field->id."(el, groupval_box, fieldval_box)
 			{
-				if(rowCount".$field->id." <= 1) return;
-				var row = jQuery(el).closest('li');
-				jQuery(row).hide('slideUp', function() { this.remove(); } );
-				rowCount".$field->id."--;
+				// Disable clicks
+				var btn = fieldval_box ? false : jQuery(el);
+				if (btn) btn.css('pointer-events', 'none').off('click');
+
+				// Find field value container
+				var row = fieldval_box ? fieldval_box : jQuery(el).closest('li');
+				
+				// Add empty container if last element, instantly removing the given field value container
+				if(rowCount".$field->id." == 1)
+					addField".$field->id."(null, groupval_box, row, {remove_previous: 1, scroll_visible: 0, animate_visible: 0});
+				
+				// Remove if not last one, if it is last one, we issued a replace (copy,empty new,delete old) above
+				if (rowCount".$field->id." > 1)
+				{
+					// Destroy the remove/add/etc buttons, so that they are not reclicked, while we do the hide effect (before DOM removal of field value)
+					row.find('.fcfield-delvalue').remove();
+					row.find('.fcfield-insertvalue').remove();
+					row.find('.fcfield-drag-handle').remove();
+					// Do hide effect then remove from DOM
+					row.slideUp(400, function(){ jQuery(this).remove(); });
+					rowCount".$field->id."--;
+				}
+
+				// If not removing re-enable clicks
+				else if (btn) btn.css('pointer-events', '').on('click');
 			}
 			";
 			
-			$css = '
-			#sortables_'.$field->id.' { float:left; margin: 0px; padding: 0px; list-style: none; white-space: nowrap; }
-			#sortables_'.$field->id.' li {
-				clear: both;
-				display: block;
-				list-style: none;
-				height: auto;
-				position: relative;
-			}
-			#sortables_'.$field->id.' li.sortabledisabled {
-				background : transparent url(components/com_flexicontent/assets/images/move3.png) no-repeat 0px 1px;
-			}
-			#sortables_'.$field->id.' li input { cursor: text;}
-			#add'.$field->name.' { margin-top: 5px; clear: both; display:block; }
-			#sortables_'.$field->id.' li .admintable { text-align: left; }
-			#sortables_'.$field->id.' li:only-child span.fcfield-drag, #sortables_'.$field->id.' li:only-child input.fcfield-button { display:none; }
-			';
+			$css .= '';
 			
-			$remove_button = '<input class="fcfield-button" type="button" value="'.JText::_( 'FLEXI_REMOVE_VALUE' ).'" onclick="deleteField'.$field->id.'(this);" />';
-			$move2 	= '<span class="fcfield-drag">'.JHTML::image( JURI::base().'components/com_flexicontent/assets/images/move2.png', JText::_( 'FLEXI_CLICK_TO_DRAG' ) ) .'</span>';
+			$remove_button = '<span class="'.$add_on_class.' fcfield-delvalue'.($cparams->get('form_font_icons', 1) ? ' fcfont-icon' : '').'" title="'.JText::_( 'FLEXI_REMOVE_VALUE' ).'" onclick="deleteField'.$field->id.'(this);"></span>';
+			$move2 = '<span class="'.$add_on_class.' fcfield-drag-handle'.($cparams->get('form_font_icons', 1) ? ' fcfont-icon' : '').'" title="'.JText::_( 'FLEXI_CLICK_TO_DRAG' ).'"></span>';
+			$add_here = '';
+			$add_here .= $add_position==2 || $add_position==3 ? '<span class="'.$add_on_class.' fcfield-insertvalue fc_before'.($cparams->get('form_font_icons', 1) ? ' fcfont-icon' : '').'" onclick="addField'.$field->id.'(null, jQuery(this).closest(\'ul\'), jQuery(this).closest(\'li\'), {insert_before: 1});" title="'.JText::_( 'FLEXI_ADD_BEFORE' ).'"></span> ' : '';
+			$add_here .= $add_position==1 || $add_position==3 ? '<span class="'.$add_on_class.' fcfield-insertvalue fc_after'.($cparams->get('form_font_icons', 1) ? ' fcfont-icon' : '').'"  onclick="addField'.$field->id.'(null, jQuery(this).closest(\'ul\'), jQuery(this).closest(\'li\'), {insert_before: 0});" title="'.JText::_( 'FLEXI_ADD_AFTER' ).'"></span> ' : '';
 		} else {
 			$remove_button = '';
 			$move2 = '';
-			$js = '';
-			$css = '';
+			$add_here = '';
+			$js .= '';
+			$css .= '';
 		}
 		
 		// Drop-Down select for textselect field type
@@ -197,12 +270,12 @@ class plgFlexicontent_fieldsText extends JPlugin
 			}
 		
 			$sel_classes  = ' fcfield_textselval use_select2_lib ';
-		  $sel_onchange = "this.getParent().getElement('input.fcfield_textval').setProperty('value', this.getProperty('value')); this.setProperty('value', ''); ";
+		  $sel_onchange = " jQuery(this).parent().find('input.fcfield_textval').val(jQuery(this).val()).trigger('blur'); jQuery(this).select2('val', ''); ";
 			$sel_attribs  = ' class="'.$sel_classes.'" onchange="'.$sel_onchange.'"';
 			
-			$fieldname_sel = FLEXI_J16GE ? 'custom['.$field->name.'_sel][]' : $field->name.'_sel[]';
-			$sel_ops = plgFlexicontent_fieldsText::buildSelectOptions($field, $item);
-			$select_field = JHTML::_('select.genericlist', $sel_ops, $fieldname_sel, $sel_attribs, 'value', 'text', array());
+			$sel_fieldname = 'custom['.$field->name.'_sel][]';
+			$sel_options = plgFlexicontent_fieldsText::buildSelectOptions($field, $item);
+			$select_field = JHTML::_('select.genericlist', $sel_options, $sel_fieldname, $sel_attribs, 'value', 'text', array());
 		} else {
 			$select_field='';
 		}
@@ -210,41 +283,80 @@ class plgFlexicontent_fieldsText extends JPlugin
 		if ($js)  $document->addScriptDeclaration($js);
 		if ($css) $document->addStyleDeclaration($css);
 		
-		if ($custommask && $inputmask=="__custom__") {
-			$validate_mask = " data-inputmask=\" ".$custommask." \" ";
-		} else {
-			$validate_mask = $inputmask ? " data-inputmask=\" 'alias': '".$inputmask."' \" " : "";
+		$classes  = 'fcfield_textval'.$required;
+		
+		// Create attributes for JS inputmask validation
+		$validate_mask = '';
+		switch ($inputmask) {
+		case '__regex__':
+			if ($regexmask) {
+				$validate_mask = " data-inputmask-regex=\"".$regexmask."\" ";
+				$classes .= ' inputmask-regex';
+			}
+			break;
+		case '__custom__':
+			if ($custommask) {
+				$validate_mask = " data-inputmask=\"".$custommask."\" ";
+				$classes .= ' has_inputmask';
+			}
+			break;
+		default:
+			if ($inputmask){
+				$validate_mask = " data-inputmask=\" 'alias': '".$inputmask."' \" ";
+				$classes .= ' has_inputmask';
+			}
 		}
 		
-		$classes = 'fcfield_textval inputbox'.$required.($inputmask ? ' has_inputmask' : '');
+		// Add placeholder tag parameter if not using validation mask, (if using vaildation mask then placeholder should be added a validation mask property)
+		$attribs .= $placeholder ? ' placeholder="'.$placeholder.'" ' : '';
+		
+		
+		// *****************************************
+		// Create field's HTML display for item form
+		// *****************************************
 		
 		$field->html = array();
 		$n = 0;
+		//if ($use_ingroup) {print_r($field->value);}
 		foreach ($field->value as $value)
 		{
+			if ( !strlen($value) && !$use_ingroup && $n) continue;  // If at least one added, skip empty if not in field group
+			
+			$fieldname_n = $fieldname.'['.$n.']';
 			$elementid_n = $elementid.'_'.$n;
 			
-			$text_field = '<input '. $validate_mask .' id="'.$elementid_n.'" name="'.$fieldname.'" class="'.$classes.'" type="text" size="'.$size.'" value="'.$value.'" '.$attribs.' />';
+			// NOTE: HTML tag id of this form element needs to match the -for- attribute of label HTML tag of this FLEXIcontent field, so that label will be marked invalid when needed
+			$text_field = $pretext.
+				'<input value="'.htmlspecialchars( $value, ENT_COMPAT, 'UTF-8' ).'" '
+					.$validate_mask.' id="'.$elementid_n.'" name="'.$fieldname_n.'" class="'.$classes.'" type="text" '.$attribs.'
+				/>'
+				.$posttext;
 			
 			$field->html[] = '
 				'.$text_field.'
 				'.$select_field.'
-				'.$move2.'
-				'.$remove_button.'
-				';
+				'.($use_ingroup ? '' : '
+				<div class="'.$input_grp_class.' fc-xpended-btns">
+					'.$move2.'
+					'.$remove_button.'
+					'.(!$add_position ? '' : $add_here).'
+				</div>
+				');
 			
 			$n++;
 			if (!$multiple) break;  // multiple values disabled, break out of the loop, not adding further values even if the exist
 		}
 		
-		if ($multiple) { // handle multiple records
-			$_list = "<li>". implode("</li>\n<li>", $field->html) ."</li>\n";
-			$field->html = '
-				<ul class="fcfield-sortables" id="sortables_'.$field->id.'">' .$_list. '</ul>
-				<input type="button" class="fcfield-addvalue" onclick="addField'.$field->id.'(this);" value="'.JText::_( 'FLEXI_ADD_VALUE' ).'" />
-			';
+		if ($use_ingroup) { // do not convert the array to string if field is in a group
+		} else if ($multiple) { // handle multiple records
+			$field->html = !count($field->html) ? '' :
+				'<li class="'.$value_classes.'">'.
+					implode('</li><li class="'.$value_classes.'">', $field->html).
+				'</li>';
+			$field->html = '<ul class="fcfield-sortables" id="sortables_'.$field->id.'">' .$field->html. '</ul>';
+			if (!$add_position) $field->html .= '<span class="fcfield-addvalue '.($cparams->get('form_font_icons', 1) ? ' fcfont-icon' : '').'" onclick="addField'.$field->id.'(this);" title="'.JText::_( 'FLEXI_ADD_TO_BOTTOM' ).'">'.JText::_( 'FLEXI_ADD_VALUE' ).'</span>';
 		} else {  // handle single values
-			$field->html = $field->html[0];
+			$field->html = '<div class="fcfieldval_container valuebox fcfieldval_container_'.$field->id.'">' . $field->html[0] .'</div>';
 		}
 	}
 	
@@ -252,31 +364,85 @@ class plgFlexicontent_fieldsText extends JPlugin
 	// Method to create field's HTML display for frontend views
 	function onDisplayFieldValue(&$field, $item, $values=null, $prop='display')
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		$field->label = JText::_($field->label);
 		
+		// Some variables
+		$is_ingroup  = !empty($field->ingroup);
+		$use_ingroup = $field->parameters->get('use_ingroup', 0);
+		$multiple    = $use_ingroup || (int) $field->parameters->get( 'allow_multiple', 0 ) ;
+		$view = JRequest::getVar('flexi_callview', JRequest::getVar('view', FLEXI_ITEMVIEW));
+		
+		// Value handling parameters
+		$lang_filter_values = $field->parameters->get( 'lang_filter_values', 0);
+		$clean_output = $field->parameters->get('clean_output', 0);
+		$encode_output = $field->parameters->get('encode_output', 0);
+		$format_output = $field->parameters->get('format_output', 0);
+		if ($format_output > 0) {  // 1: decimal, 2: integer
+			$decimal_digits_displayed = $format_output==2 ? 0 : (int)$field->parameters->get('decimal_digits_displayed', 2);
+			$decimal_digits_sep    = $field->parameters->get('decimal_digits_sep', '.');
+			$decimal_thousands_sep = $field->parameters->get('decimal_thousands_sep', ',');
+			$output_prefix = JText::_($field->parameters->get('output_prefix', ''));
+			$output_suffix = JText::_($field->parameters->get('output_suffix', ''));
+		} else if ($format_output == -1) {
+			$output_custom_func = $field->parameters->get('output_custom_func', '');
+		}
+		
+		
+		// Default value
+		$value_usage   = $field->parameters->get( 'default_value_use', 0 ) ;
+		$default_value = ($value_usage == 2) ? $field->parameters->get( 'default_value', '' ) : '';
+		$default_value = $default_value ? JText::_($default_value) : '';
 		
 		// Get field values
 		$values = $values ? $values : $field->value;
-		// DO NOT terminate yet if value is empty since a default value on empty may have been defined
 		
-		// Handle default value loading, instead of empty value
-		$default_value_use= $field->parameters->get( 'default_value_use', 0 ) ;
-		$default_value		= ($default_value_use == 2) ? $field->parameters->get( 'default_value', '' ) : '';
-		if ( empty($values) && !strlen($default_value) ) {
-			$field->{$prop} = '';
-			return;
-		} else if ( empty($values) && strlen($default_value) ) {
+		// Check for no values and no default value, and return empty display
+		if ( empty($values) ) {
+			if (!strlen($default_value)) {
+				$field->{$prop} = $is_ingroup ? array() : '';
+				return;
+			}
 			$values = array($default_value);
 		}
 		
-		// Value handling parameters
-		$multiple       = $field->parameters->get( 'allow_multiple', 1 ) ;
 		
-		// Language filter the values
-		$lang_filter_values = $field->parameters->get( 'lang_filter_values', 1);
+		// ******************************************
+		// Language filter, clean output, encode HTML
+		// ******************************************
+		
+		if ($clean_output) {
+			$ifilter = $clean_output == 1 ? JFilterInput::getInstance(null, null, 1, 1) : JFilterInput::getInstance();
+		}
+		if ($lang_filter_values || $clean_output || $encode_output || $format_output)
+		{
+			// (* BECAUSE OF THIS, the value display loop expects unserialized values)
+			foreach ($values as &$value)
+			{
+				if ( !strlen($value) ) continue;  // skip further actions
+				
+				if ($format_output > 0) {  // 1: decimal, 2: integer
+					$value = @ number_format($value, $decimal_digits_displayed, $decimal_digits_sep, $decimal_thousands_sep);
+					$value = $value === NULL ? 0 : $value;
+					$value = $output_prefix .$value. $output_suffix;
+				} else if (!empty($output_custom_func)) {
+					$value = eval( "\$value= \"{$value}\";" . $output_custom_func);
+				}
+				
+				if ($lang_filter_values) {
+					$value = JText::_($value);
+				}
+				if ($clean_output) {
+					$value = $ifilter->clean($value, 'string');
+				}
+				if ($encode_output) {
+					$value = htmlspecialchars( $value, ENT_QUOTES, 'UTF-8' );
+				}
+			}
+			unset($value); // Unset this or you are looking for trouble !!!, because it is a reference and reusing it will overwrite the pointed variable !!!
+		}
+		
 		
 		// Prefix - Suffix - Separator parameters, replacing other field values if found
 		$remove_space = $field->parameters->get( 'remove_space', 0 ) ;
@@ -285,6 +451,9 @@ class plgFlexicontent_fieldsText extends JPlugin
 		$separatorf	= $field->parameters->get( 'separatorf', 1 ) ;
 		$opentag		= FlexicontentFields::replaceFieldValue( $field, $item, $field->parameters->get( 'opentag', '' ), 'opentag' );
 		$closetag		= FlexicontentFields::replaceFieldValue( $field, $item, $field->parameters->get( 'closetag', '' ), 'closetag' );
+		
+		// Microdata (classify the field values for search engines)
+		$itemprop    = $field->parameters->get('microdata_itemprop');
 		
 		if($pretext)  { $pretext  = $remove_space ? $pretext : $pretext . ' '; }
 		if($posttext) { $posttext = $remove_space ? $posttext : ' ' . $posttext; }
@@ -296,7 +465,7 @@ class plgFlexicontent_fieldsText extends JPlugin
 			break;
 
 			case 1:
-			$separatorf = '<br />';
+			$separatorf = '<br class="fcclear" />';
 			break;
 
 			case 2:
@@ -320,36 +489,44 @@ class plgFlexicontent_fieldsText extends JPlugin
 			break;
 		}
 		
-		// initialise property
+		// Get layout name
+		$viewlayout = $field->parameters->get('viewlayout', '');
+		$viewlayout = $viewlayout ? 'value_'.$viewlayout : 'value_default';
+		
+		// Create field's HTML, using layout file
 		$field->{$prop} = array();
-		$n = 0;
-		foreach ($values as $value)
+		include(self::getViewPath($this->fieldtypes[0], $viewlayout));
+		
+		// Do not convert the array to string if field is in a group, and do not add: FIELD's opentag, closetag, value separator
+		if (!$is_ingroup)
 		{
-			if ( !strlen($value) ) continue;
-			
-			$field->{$prop}[$n]	= $pretext . ($lang_filter_values ? JText::_($value) : $value) . $posttext;
-			
-			$n++;
-			if (!$multiple) break;  // multiple values disabled, break out of the loop, not adding further values even if the exist
+			// Apply values separator
+			$field->{$prop} = implode($separatorf, $field->{$prop});
+			if ( $field->{$prop}!=='' )
+			{
+				// Apply field 's opening / closing texts
+				$field->{$prop} = $opentag . $field->{$prop} . $closetag;
+				
+				// Add microdata once for all values, if field -- is NOT -- in a field group
+				if ( $itemprop )
+				{
+					$field->{$prop} = '<div style="display:inline" itemprop="'.$itemprop.'" >' .$field->{$prop}. '</div>';
+				}
+			}
 		}
 		
-		// Apply separator and open/close tags
-		$field->{$prop} = implode($separatorf, $field->{$prop});
-		if ( $field->{$prop}!=='' ) {
-			$field->{$prop} = $opentag . $field->{$prop} . $closetag;
-		} else {
-			$field->{$prop} = '';
-		}
 		
-		// Add OGP Data
-		$useogp     = $field->parameters->get('useogp', 0);
-		$ogpinview  = $field->parameters->get('ogpinview', array());
-		$ogpinview  = FLEXIUtilities::paramToArray($ogpinview);
-		$ogpmaxlen  = $field->parameters->get('ogpmaxlen', 300);
-		$ogpusage   = $field->parameters->get('ogpusage', 0);
-		
-		if ($useogp && $field->{$prop}) {
-			$view = JRequest::setVar('view', JRequest::getVar('view', FLEXI_ITEMVIEW));
+		// ************
+		// Add OGP tags
+		// ************
+		if ($field->parameters->get('useogp', 0) && !empty($field->{$prop}))
+		{
+			// Get ogp configuration
+			$ogpinview  = $field->parameters->get('ogpinview', array());
+			$ogpinview  = FLEXIUtilities::paramToArray($ogpinview);
+			$ogpmaxlen  = $field->parameters->get('ogpmaxlen', 300);
+			$ogpusage   = $field->parameters->get('ogpusage', 0);
+			
 			if ( in_array($view, $ogpinview) ) {
 				switch ($ogpusage)
 				{
@@ -358,7 +535,8 @@ class plgFlexicontent_fieldsText extends JPlugin
 					default: $usagetype = ''; break;
 				}
 				if ($usagetype) {
-					$content_val = flexicontent_html::striptagsandcut($field->{$prop}, $ogpmaxlen);
+					$content_val = !$is_ingroup ? flexicontent_html::striptagsandcut($field->{$prop}, $ogpmaxlen) :
+						flexicontent_html::striptagsandcut($opentag.implode($separatorf, $field->{$prop}).$closetag, $ogpmaxlen) ;
 					JFactory::getDocument()->addCustomTag('<meta property="og:'.$usagetype.'" content="'.$content_val.'" />');
 				}
 			}
@@ -374,9 +552,17 @@ class plgFlexicontent_fieldsText extends JPlugin
 	// Method to handle field's values before they are saved into the DB
 	function onBeforeSaveField( &$field, &$post, &$file, &$item )
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
-		if ( !is_array($post) && !strlen($post) ) return;
+		
+		$use_ingroup = $field->parameters->get('use_ingroup', 0);
+		if ( !is_array($post) && !strlen($post) && !$use_ingroup ) return;
+		
+		// Take into consideration client side validation
+		$inputmask	= $field->parameters->get( 'inputmask', false ) ;
+		
+		// Server side validation
+		$validation = $field->parameters->get( 'validation', 'HTML' ) ;
+		$maxlength  = (int) $field->parameters->get( 'maxlength', 0 ) ;
 		
 		// Make sure posted data is an array 
 		$post = !is_array($post) ? array($post) : $post;
@@ -386,23 +572,57 @@ class plgFlexicontent_fieldsText extends JPlugin
 		$new = 0;
 		foreach ($post as $n => $v)
 		{
-			if ($post[$n] !== '')
-			{
-				$newpost[$new] = $post[$n];
-				$new++;
+			// Unmasking is done via JS code, but try to redo it, to avoid value loss is unmasking was not done
+			if (1) {
+				//JFactory::getApplication()->enqueueMessage( print_r($post[$n], true), 'warning');
+				if ($inputmask=="decimal_comma") {
+					$post[$n] = str_replace('.', '', $post[$n]);
+					$post[$n] = str_replace(',', '.', $post[$n]);
+				}
+				else if ($inputmask=="decimal_comma") {
+					$post[$n] = str_replace(',', '', $post[$n]);
+				}
+				else if ($inputmask=="currency" || $inputmask=="currency_euro") {
+					$post[$n] = str_replace('$', '', $post[$n]);
+					$post[$n] = str_replace(chr(0xE2).chr(0x82).chr(0xAC), '', $post[$n]);
+					$post[$n] = str_replace(',', '', $post[$n]);
+				}
+				//JFactory::getApplication()->enqueueMessage( print_r($post[$n], true), 'warning');
 			}
+			
+			// **************************************************************
+			// Validate data, skipping values that are empty after validation
+			// **************************************************************
+			
+			$post[$n] = flexicontent_html::dataFilter($post[$n], $maxlength, $validation, 0);
+			
+			// Skip empty value, but if in group increment the value position
+			if (!strlen($post[$n]))
+			{
+				if ($use_ingroup) $newpost[$new++] = null;
+				continue;
+			}
+			
+			$newpost[$new] = $post[$n];
+			$new++;
 		}
 		$post = $newpost;
+		/*if ($use_ingroup) {
+			$app = JFactory::getApplication();
+			$app->enqueueMessage( print_r($post, true), 'warning');
+		}*/
 	}
 	
 	
 	// Method to take any actions/cleanups needed after field's values are saved into the DB
 	function onAfterSaveField( &$field, &$post, &$file, &$item ) {
+		if ( !in_array($field->field_type, self::$field_types) ) return;
 	}
 	
 	
 	// Method called just before the item is deleted to remove custom item data related to the field
 	function onBeforeDeleteField(&$field, &$item) {
+		if ( !in_array($field->field_type, self::$field_types) ) return;
 	}
 	
 	
@@ -416,12 +636,12 @@ class plgFlexicontent_fieldsText extends JPlugin
 	{
 		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
-		self::onDisplayFilter($filter, $value, $formName);
+		$this->onDisplayFilter($filter, $value, $formName, $isSearchView=1);
 	}
 	
 	
 	// Method to display a category filter for the category view
-	function onDisplayFilter(&$filter, $value='', $formName='adminForm')
+	function onDisplayFilter(&$filter, $value='', $formName='adminForm', $isSearchView=0)
 	{
 		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
@@ -431,21 +651,21 @@ class plgFlexicontent_fieldsText extends JPlugin
 	
  	// Method to get the active filter result (an array of item ids matching field filter, or subquery returning item ids)
 	// This is for content lists e.g. category view, and not for search view
-	function getFiltered(&$filter, $value)
+	function getFiltered(&$filter, $value, $return_sql=true)
 	{
 		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
-		return FlexicontentFields::getFiltered($filter, $value, $return_sql=true);
+		return FlexicontentFields::getFiltered($filter, $value, $return_sql);
 	}
 	
 	
  	// Method to get the active filter result (an array of item ids matching field filter, or subquery returning item ids)
 	// This is for search view
-	function getFilteredSearch(&$field, $value)
+	function getFilteredSearch(&$filter, $value, $return_sql=true)
 	{
-		if ( !in_array($field->field_type, self::$field_types) ) return;
+		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
-		return FlexicontentFields::getFilteredSearch($field, $value, $return_sql=true);
+		return FlexicontentFields::getFilteredSearch($filter, $value, $return_sql);
 	}
 	
 	
@@ -466,10 +686,10 @@ class plgFlexicontent_fieldsText extends JPlugin
 		// c. If $values is null then only the column 'value' will be added to the search index after retrieving 
 		//    the column value from table 'flexicontent_fields_item_relations' for current field / item pair will be used
 		// 'required_properties' is meant for multi-property fields, do not add to search index if any of these is empty
-		// 'search_properties'   containts property fields that should be added as text
+		// 'search_properties'   contains property fields that should be added as text
 		// 'properties_spacer'  is the spacer for the 'search_properties' text
 		// 'filter_func' is the filtering function to apply to the final text
-		FlexicontentFields::onIndexAdvSearch($field, $post, $item, $required_properties=array(), $search_properties=array(), $properties_spacer=' ', $filter_func=null);
+		FlexicontentFields::onIndexAdvSearch($field, $post, $item, $required_properties=array(), $search_properties=array(), $properties_spacer=' ', $filter_func='strip_tags');
 		return true;
 	}
 	
@@ -483,10 +703,10 @@ class plgFlexicontent_fieldsText extends JPlugin
 		// a. Each of the values of $values array will be added to the basic search index (one record per item)
 		// b. If $values is null then the column value from table 'flexicontent_fields_item_relations' for current field / item pair will be used
 		// 'required_properties' is meant for multi-property fields, do not add to search index if any of these is empty
-		// 'search_properties'   containts property fields that should be added as text
+		// 'search_properties'   contains property fields that should be added as text
 		// 'properties_spacer'  is the spacer for the 'search_properties' text
 		// 'filter_func' is the filtering function to apply to the final text
-		FlexicontentFields::onIndexSearch($field, $post, $item, $required_properties=array(), $search_properties=array(), $properties_spacer=' ', $filter_func=null);
+		FlexicontentFields::onIndexSearch($field, $post, $item, $required_properties=array(), $search_properties=array(), $properties_spacer=' ', $filter_func='strip_tags');
 		return true;
 	}
 	
@@ -521,7 +741,7 @@ class plgFlexicontent_fieldsText extends JPlugin
 		$field_prompt = $field->parameters->get('select_field_prompt', $default_prompt);
 		$options[] = JHTML::_('select.option', '', '-'.JText::_($field_prompt).'-');
 		
-		$lang_filter_values = $field->parameters->get( 'lang_filter_values', 1);
+		$lang_filter_values = $field->parameters->get( 'lang_filter_values', 0);
 		if ($results) foreach($results as $result) {
 			if ( !strlen($result->value) ) continue;
 			$options[] = JHTML::_('select.option', $result->value, ($lang_filter_values ? JText::_($result->text) : $result->text));

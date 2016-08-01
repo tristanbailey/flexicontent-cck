@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.controller');
+// Register autoloader for parent controller, in case controller is executed by another component
+JLoader::register('FlexicontentController', JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'controller.php');
 
 /**
  * FLEXIcontent Component Tags Controller
@@ -240,9 +241,45 @@ class FlexicontentControllerTags extends FlexicontentController
 	{
 		JRequest::setVar( 'view', 'tag' );
 		JRequest::setVar( 'hidemainmenu', 1 );
+		
+		$user     = JFactory::getUser();
+		$session  = JFactory::getSession();
+		$document = JFactory::getDocument();
+		
 
+
+		// Get/Create the view
+		$viewType   = $document->getType();
+		$viewName   = $this->input->get('view', $this->default_view, 'cmd');
+		$viewLayout = $this->input->get('layout', 'default', 'string');
+		$view = $this->getView($viewName, $viewType, '', array('base_path' => $this->basePath, 'layout' => $viewLayout));
+		
+		// Get/Create the model
 		$model = $this->getModel('tag');
-		$user  = JFactory::getUser();
+		
+		// Push the model into the view (as default), later we will call the view display method instead of calling parent's display task, because it will create a 2nd model instance !!
+		$view->setModel($model, true);
+		$view->document = $document;
+		
+		$cid   = JRequest::getVar( 'cid', array(0), 'default', 'array' );
+		$tag_id = (int)$cid[0];
+		
+		
+		// calculate access
+		if (!$tag_id) {
+			$is_authorised = $user->authorise('flexicontent.createtags', 'com_flexicontent');
+		} else {
+			//$asset = 'com_flexicontent.tag.' . $tag_id;
+			//$is_authorised = $user->authorise('flexicontent.edittag', $asset);
+			$is_authorised = $user->authorise('flexicontent.managetags', 'com_flexicontent');
+		}
+		
+		// check access
+		if ( !$is_authorised ) {
+			JError::raiseWarning( 403, JText::_( 'FLEXI_ALERTNOTAUTH_TASK' ) );
+			$this->setRedirect( 'index.php?option=com_flexicontent&view=tags', '');
+			return;
+		}
 		
 		// Check if record is checked out by other editor
 		if ( $model->isCheckedOut( $user->get('id') ) ) {

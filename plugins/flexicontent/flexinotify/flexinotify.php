@@ -19,7 +19,7 @@
 // Check to ensure this file is included in Joomla!
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport( 'joomla.plugin.plugin' );
+jimport('cms.plugin.plugin');
 
 /**
  * Flexicontent Notification Plugin
@@ -42,7 +42,7 @@ class plgFlexicontentFlexinotify extends JPlugin
 	 * @param object $params  The object that holds the plugin parameters
 	 * @since 1.5
 	 */
-	function plgFlexicontentFlexinotify( &$subject, $params )
+	function __construct( &$subject, $params )
 	{
 		parent::__construct( $subject, $params );
 
@@ -172,16 +172,16 @@ class plgFlexicontentFlexinotify extends JPlugin
 	{
 		global $globalcats;
 		$app = JFactory::getApplication();
+		$config = JFactory::getConfig();
+		$categories = & $globalcats;
 		
 		// Get the route helper
 		require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'helpers'.DS.'route.php');
-		// Import utility class that contains the send mail helper function
-		if (!FLEXI_J16GE) jimport( 'joomla.utilities.utility' );
-		jimport( 'joomla.mail.helper' );
-		if (FLEXI_J16GE) {
-			$mailer = JFactory::getMailer();
-			$mailer->Encoding = 'base64';
-		}
+		
+		// Import joomla mail helper class that contains the sendMail helper function
+		jimport('joomla.mail.helper');
+		$mailer = JFactory::getMailer();
+		$mailer->Encoding = 'base64';
 		
 		// Parameters for 'message' language string
 		//
@@ -211,30 +211,40 @@ class plgFlexicontentFlexinotify extends JPlugin
 		$subname 	= ($send_personalized && $include_fullname) ? '__SUBSCRIBER_NAME__' : JText::_('FLEXI_SUBSCRIBER');
 		$itemid   = $item->id;
 		$title    = $item->title;
-		$maincat  = $globalcats[$item->catid]->title;
+		$maincat  = $categories[$item->catid]->title;
+		
+		//$_sh404sef = JPluginHelper::isEnabled('system', 'sh404sef') && $config->get('sef');
+		$_sh404sef = defined('SH404SEF_IS_RUNNING') && $config->get('sef');
 		
 		// Domain URL and autologin vars
 		$server = JURI::getInstance()->toString(array('scheme', 'host', 'port'));
-		$autologin= ($send_personalized && $user_autologin) ? '&fcu=__SUBSCRIBER_USERNAME__&fcp=__SUBSCRIBER_PASSWORD__' : '';
+		$autologin = ($send_personalized && $user_autologin) ? '&fcu=__SUBSCRIBER_USERNAME__&fcp=__SUBSCRIBER_PASSWORD__' : '';
 		
-		// Check if we are in the backend, in the back end we need to set the application to the site app instead
+		// We use 'isAdmin' check so that we can copy later without change, e.g. to a plugin
 		$isAdmin = JFactory::getApplication()->isAdmin();
-		if ( $isAdmin && FLEXI_J16GE ) JFactory::$application = JApplication::getInstance('site');
 		
-		// Create the URL
-		$item_url = JRoute::_(FlexicontentHelperRoute::getItemRoute($item->id.':'.$item->alias, $globalcats[$item->catid]->slug) . $autologin );
+		// Create the non-SEF URL
+		$item_url =
+			FlexicontentHelperRoute::getItemRoute($item->id.':'.$item->alias, $categories[$item->catid]->slug)
+			. $autologin
+			. ($item->language!='*' ? '&lang='.substr($item->language, 0,2) : '');
+		
+		// Check if we are in the backend, in the backend we need to set the application to the site app
+		if ( $isAdmin && !$_sh404sef )  JFactory::$application = JApplication::getInstance('site');
+		
+		// Create the SEF URL
+		$item_url = //!$isAdmin && $_sh404sef  ?  Sh404sefHelperGeneral::getSefFromNonSef($item_url, $fullyQualified = true, $xhtml = false, $ssl = null) :
+			JRoute::_($item_url);
+		
+		// Restore application to the admin app if we are in the backend
+		if  ( $isAdmin && !$_sh404sef )  JFactory::$application = JApplication::getInstance('administrator');
 		
 		// Check if we are in the backend again
-		// In backend we need to remove administrator from URL as it is added even though we've set the application to the site app
-		if( $isAdmin) {
-			if ( FLEXI_J16GE ) {
-				$admin_folder = str_replace(JURI::root(true),'',JURI::base(true));
-				$item_url = str_replace($admin_folder, '', $item_url);
-				// Restore application
-				JFactory::$application = JApplication::getInstance('administrator');
-			} else {
-				$item_url = JURI::root(true).'/'.$item_url;
-			}
+		if ( $isAdmin )
+		{
+			// Remove administrator from URL as it is added even though we've set the application to the site app
+			$admin_folder = str_replace(JURI::root(true),'',JURI::base(true));
+			$item_url = str_replace($admin_folder.'/', '/', $item_url);
 		}
 		
 		$link     = $server . $item_url;
@@ -279,9 +289,7 @@ class plgFlexicontentFlexinotify extends JPlugin
 				$html_mode=true; $cc=null; $bcc=null;
 				$attachment=null; $replyto=null; $replytoname=null;
 				
-				$send_result = FLEXI_J16GE ?
-					$mailer->sendMail( $from, $fromname, $recipient, $subject, $_message, $html_mode, $cc, $bcc, $attachment, $replyto, $replytoname ) :
-					JUtility::sendMail( $from, $fromname, $recipient, $subject, $_message, $html_mode, $cc, $bcc, $attachment, $replyto, $replytoname );
+				$send_result = $mailer->sendMail( $from, $fromname, $recipient, $subject, $_message, $html_mode, $cc, $bcc, $attachment, $replyto, $replytoname );
 				if ($send_result) $count_sent++;
 			}
 			$send_result = (boolean) $count_sent;
@@ -308,9 +316,7 @@ class plgFlexicontentFlexinotify extends JPlugin
 				$html_mode=true; $cc=null; $bcc = $to_100;
 				$attachment=null; $replyto=null; $replytoname=null;
 				
-				$send_result = FLEXI_J16GE ?
-					$mailer->sendMail( $from, $fromname, $recipient, $subject, $message, $html_mode, $cc, $bcc, $attachment, $replyto, $replytoname ) :
-					JUtility::sendMail( $from, $fromname, $recipient, $subject, $message, $html_mode, $cc, $bcc, $attachment, $replyto, $replytoname );
+				$send_result = $mailer->sendMail( $from, $fromname, $recipient, $subject, $message, $html_mode, $cc, $bcc, $attachment, $replyto, $replytoname );
 				if ($send_result) $count_sent += count($to_100);
 			}
 			$send_result = (boolean) $count_sent;

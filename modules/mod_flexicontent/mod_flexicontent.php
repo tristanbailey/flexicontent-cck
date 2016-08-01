@@ -6,14 +6,15 @@
  * @copyright (C) 2009 Emmanuel Danan - www.vistamedia.fr
  * @license GNU/GPL v2
  * 
- * FLEXIcontent module is universal Content Listing Module for flexicontent.
+ * Universal Content Listing Module for flexicontent.
+ *
  * FLEXIcontent is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
 
-//no direct access
+// no direct access
 defined('_JEXEC') or die('Restricted access');
 
 // Decide whether to show module contents
@@ -41,7 +42,7 @@ if ($params->get('enable_php_rule', 0)) {
 if ( $show_mod )
 {
 	global $modfc_jprof;
-	jimport( 'joomla.error.profiler' );
+	jimport('joomla.profiler.profiler');
 	$modfc_jprof = new JProfiler();
 	$modfc_jprof->mark('START: FLEXIcontent Module');
 	global $mod_fc_run_times;
@@ -51,14 +52,25 @@ if ( $show_mod )
 	global $fc_content_plg_microtime;
 	$fc_content_plg_microtime = 0;
 	
-	// load english language file for 'mod_flexicontent' module then override with current language file
-	JFactory::getLanguage()->load('mod_flexicontent', JPATH_SITE, 'en-GB', true);
-	JFactory::getLanguage()->load('mod_flexicontent', JPATH_SITE, null, true);
+	static $mod_initialized = null;
+	$modulename = 'mod_flexicontent';
+	if ($mod_initialized === null)
+	{
+		// Load english language file for current module then override (forcing a reload) with current language file
+		JFactory::getLanguage()->load($modulename, JPATH_SITE, 'en-GB', $force_reload = false, $load_default = true);
+		JFactory::getLanguage()->load($modulename, JPATH_SITE, null, $force_reload = true, $load_default = true);
+		
+		// Load english language file for 'com_flexicontent' and then override with current language file. Do not force a reload for either (not needed)
+		JFactory::getLanguage()->load('com_flexicontent', JPATH_SITE, 'en-GB', $force_reload = false, $load_default = true);
+		JFactory::getLanguage()->load('com_flexicontent', JPATH_SITE, null, $force_reload = false, $load_default = true);
+		$mod_initialized = true;
+	}
 	
 	// initialize various variables
 	global $globalcats;
 	$document = JFactory::getDocument();
 	$caching 	= $app->getCfg('caching', 0);
+	$flexiparams = JComponentHelper::getParams('com_flexicontent');
 	
 	// include the helper only once
 	require_once (dirname(__FILE__).DS.'helper.php');
@@ -72,6 +84,19 @@ if ( $show_mod )
 	$count 					= (int)$params->get('count', 5);
 	$featured				= (int)$params->get('count_feat', 1);
 	
+	if ( $ordering_addtitle && (int)$params->get('orderbycustomfieldid', 0) && in_array('field', $ordering) )
+	{
+		$orderbycustomfieldid = (int)$params->get('orderbycustomfieldid', 0);
+		JTable::addIncludePath(JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'tables');
+		$orderby_custom_field = JTable::getInstance('flexicontent_fields', '');
+		$orderby_custom_field->load($orderbycustomfieldid);
+	}
+	
+	if ( empty($orderby_custom_field) ) {
+		$orderby_custom_field = new stdClass();
+		$orderby_custom_field->label = 'NA';
+	}
+	
 	// Default ordering is 'added' if none ordering is set. Also make sure $ordering is an array (of ordering groups)
 	if ( empty($ordering) )    $ordering = array('added');
 	if (!is_array($ordering))  $ordering = explode(',', $ordering);
@@ -79,7 +104,7 @@ if ( $show_mod )
 	// get module's basic display parameters
 	$moduleclass_sfx= $params->get('moduleclass_sfx', '');
 	$layout 				= $params->get('layout', 'default');
-	$add_ccs 				= $params->get('add_ccs', 1);
+	$add_ccs 				= $params->get('add_ccs', !$flexiparams->get('disablecss', 0));
 	$add_tooltips 	= $params->get('add_tooltips', 1);
 	$width 					= $params->get('width');
 	$height 				= $params->get('height');
@@ -153,41 +178,48 @@ if ( $show_mod )
 	$mod_fc_run_times['rendering_template'] = $modfc_jprof->getmicrotime();
 	
 	// Load needed JS libs & CSS styles
-	FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
+	//JHtml::_('behavior.framework', true);
 	flexicontent_html::loadFramework('jQuery');
 	flexicontent_html::loadFramework('flexi_tmpl_common');
 	
 	// Add tooltips
-	if ($add_tooltips) JHTML::_('behavior.tooltip');
+	if ($add_tooltips) JHtml::_('bootstrap.tooltip');
 	
 	// Add css
 	if ($add_ccs && $layout) {
-		if ($caching && !FLEXI_J16GE) {
-			// Work around for caching bug in J1.5
+		// Work around for extension that capture module's HTML 
+		if ($add_ccs==2) {
 			if (file_exists(dirname(__FILE__).DS.'tmpl'.DS.$layout.DS.$layout.'.css')) {
 				// active layout css
-				echo '<link rel="stylesheet" href="'.JURI::base(true).'/modules/mod_flexicontent/tmpl/'.$layout.'/'.$layout.'.css">';
+				echo '<link rel="stylesheet" href="'.JURI::base(true).'/modules/'.$modulename.'/tmpl/'.$layout.'/'.$layout.'.css?'.FLEXI_VHASH.'">';
 			}
-			echo '<link rel="stylesheet" href="'.JURI::base(true).'/modules/mod_flexicontent/tmpl_common/module.css">';
-			echo '<link rel="stylesheet" href="'.JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css">';
+			echo '<link rel="stylesheet" href="'.JURI::base(true).'/modules/'.$modulename.'/tmpl_common/module.css?'.FLEXI_VHASH.'">';
+			echo '<link rel="stylesheet" href="'.JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css?'.FLEXI_VHASH.'">';
 			//allow css override
 			if (file_exists(JPATH_SITE.DS.'templates'.DS.$app->getTemplate().DS.'css'.DS.'flexicontent.css')) {
 				echo '<link rel="stylesheet" href="'.JURI::base(true).'/templates/'.$app->getTemplate().'/css/flexicontent.css">';
 			}
-		} else {
-			// Standards compliant implementation for >= J1.6 or earlier versions without caching disabled
+		}
+		
+		// Standards compliant implementation by placing CSS link into the HTML HEAD
+		else {
 			if (file_exists(dirname(__FILE__).DS.'tmpl'.DS.$layout.DS.$layout.'.css')) {
 				// active layout css
-				$document->addStyleSheet(JURI::base(true).'/modules/mod_flexicontent/tmpl/'.$layout.'/'.$layout.'.css');
+				$document->addStyleSheetVersion(JURI::base(true).'/modules/'.$modulename.'/tmpl/'.$layout.'/'.$layout.'.css', FLEXI_VHASH);
 			}
-			$document->addStyleSheet(JURI::base(true).'/modules/mod_flexicontent/tmpl_common/module.css');
-			$document->addStyleSheet(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css');
+			$document->addStyleSheetVersion(JURI::base(true).'/modules/'.$modulename.'/tmpl_common/module.css', FLEXI_VHASH);
+			$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH);
 			//allow css override
 			if (file_exists(JPATH_SITE.DS.'templates'.DS.$app->getTemplate().DS.'css'.DS.'flexicontent.css')) {
 				$document->addStyleSheet(JURI::base(true).'/templates/'.$app->getTemplate().'/css/flexicontent.css');
 			}
 		}
 	}
+	
+	// Include module header, but make sure that file exists, because otherwise the Joomla module helper will include ... 'default.php'
+	// module template ! thus a Joomla override template header is allowed only if template header.php file exists locally too !!
+	if ( file_exists(dirname(__FILE__).DS.'tmpl'.DS.$layout.DS.'header.php') )
+		require(JModuleHelper::getLayoutPath('mod_flexicontent', $layout.'/header'));
 	
 	// Render Layout, (once per category if apply per category is enabled ...)
 	foreach ($catdata_arr as $i => $catdata) {
@@ -210,12 +242,11 @@ if ( $show_mod )
 		require(JModuleHelper::getLayoutPath('mod_flexicontent', $layout));
 	}
 	
-	// Add module Read More
-	if ($show_more == 1) : ?>
-	<span class="module_readon<?php echo $params->get('moduleclass_sfx'); ?>"<?php if ($more_css) : ?> style="<?php echo $more_css; ?>"<?php endif;?>>
-		<a class="readon" href="<?php echo JRoute::_($more_link); ?>" <?php if ($params->get('more_blank') == 1) {echo 'target="_blank"';} ?>><span><?php echo JText::_($more_title); ?></span></a>
-	</span>
-	<?php endif;
+	// Include module footer, e.g. includes module's Read More, because otherwise the Joomla module helper will include ... 'default.php'
+	// module template ! thus a Joomla override template header is allowed only if template header.php file exists locally too !!
+	if ( file_exists(dirname(__FILE__).DS.'tmpl'.DS.$layout.DS.'footer.php') )
+		require(JModuleHelper::getLayoutPath('mod_flexicontent', $layout.'/footer'));
+	
 	
 	$mod_fc_run_times['rendering_template'] = $modfc_jprof->getmicrotime() - $mod_fc_run_times['rendering_template'];
 	
@@ -229,7 +260,6 @@ if ( $show_mod )
 	);
 	
 	// append performance stats to global variable
-	$flexiparams = JComponentHelper::getParams('com_flexicontent');
 	if ( $flexiparams->get('print_logging_info') )
 	{
 		$modfc_jprof->mark('END: FLEXIcontent Module');

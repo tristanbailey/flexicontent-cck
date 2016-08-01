@@ -18,6 +18,9 @@
  */
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
+
+use Joomla\String\StringHelper;
+
 // first define the template name
 $tmpl = $this->tmpl;
 $item = $this->item;
@@ -37,17 +40,14 @@ if (isset($item->toc)) {
 // ***********
 $page_heading_shown =
 	$this->params->get( 'show_page_heading', 1 ) &&
-	$this->params->get('page_heading') != $item->title;
+	$this->params->get('page_heading') != $item->title &&
+	$this->params->get('show_title', 1);
 
 // Main container
 $mainAreaTag = $page_heading_shown  ?  'section' : 'article';
 
 // SEO, header level of title tag
-$itemTitleHeaderLevel = (
-	$this->params->get( 'show_page_heading', 1 ) &&
-	$this->params->get('page_heading') != $item->title &&
-	$this->params->get('show_title', 1)
-	) ? '2' : '1'; 
+$itemTitleHeaderLevel = $page_heading_shown ? '2' : '1'; 
 	
 // SEO, header level of tab title tag
 $tabsHeaderLevel = $itemTitleHeaderLevel == '2'  ?  '3' : '2';  	
@@ -58,9 +58,13 @@ $page_classes .= ' fcitems fcitem'.$item->id;
 $page_classes .= ' fctype'.$item->type_id;
 $page_classes .= ' fcmaincat'.$item->catid;
 if ($menu) $page_classes .= ' menuitem'.$menu->id; 
+
+// SEO
+$microdata_itemtype = $this->params->get( 'microdata_itemtype');
+$microdata_itemtype_code = $microdata_itemtype ? 'itemscope itemtype="http://schema.org/'.$microdata_itemtype.'"' : '';
 ?>
 
-<?php echo '<'.$mainAreaTag; ?> id="flexicontent" class="<?php echo $page_classes; ?> group" >
+<?php echo '<'.$mainAreaTag; ?> id="flexicontent" class="<?php echo $page_classes; ?> group" <?php echo $microdata_itemtype_code; ?>>
 	
 	<?php echo ( ($mainAreaTag == 'section') ? '<header>' : ''); ?>
 	
@@ -75,7 +79,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 	<?php if (JRequest::getCmd('print')) : ?>
 		<!-- BOF Print handling -->
 		<?php if ($this->params->get('print_behaviour', 'auto') == 'auto') : ?>
-			<script type="text/javascript">window.addEvent('domready', function() { window.print(); });</script>
+			<script type="text/javascript">jQuery(document).ready(function(){ window.print(); });</script>
 		<?php	elseif ($this->params->get('print_behaviour') == 'button') : ?>
 			<input type='button' id='printBtn' name='printBtn' value='<?php echo JText::_('Print');?>' class='btn btn-info' onclick='this.style.display="none"; window.print(); return false;'>
 		<?php endif; ?>
@@ -89,24 +93,47 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 		$printbutton = flexicontent_html::printbutton( $this->print_link, $this->params );
 		$editbutton = flexicontent_html::editbutton( $item, $this->params );
 		$statebutton = flexicontent_html::statebutton( $item, $this->params );
+		$deletebutton = flexicontent_html::deletebutton( $item, $this->params );
 		$approvalbutton = flexicontent_html::approvalbutton( $item, $this->params );
 		?>
 		
-		<?php if ($pdfbutton || $mailbutton || $printbutton || $editbutton || $statebutton || $approvalbutton) : ?>
-		<!-- BOF buttons -->
-		<div class="buttons">
-			<?php echo $pdfbutton; ?>
-			<?php echo $mailbutton; ?>
-			<?php echo $printbutton; ?>
-			<?php echo $editbutton; ?>
-			<?php echo $statebutton; ?>
-			<?php echo $approvalbutton; ?>
-		</div>
-		<!-- EOF buttons -->
+		<?php if ($pdfbutton || $mailbutton || $printbutton || $editbutton || $deletebutton || $statebutton || $approvalbutton) : ?>
+		
+			<!-- BOF buttons -->
+			<?php if ($this->params->get('btn_grp_dropdown')) : ?>
+			
+			<div class="buttons btn-group">
+			  <button type="button" class="btn dropdown-toggle" data-toggle="dropdown">
+			    <span class="<?php echo $this->params->get('btn_grp_dropdown_class', 'icon-options'); ?>"></span>
+			  </button>
+			  <ul class="dropdown-menu" role="menu">
+			    <?php echo $pdfbutton    ? '<li>'.$pdfbutton.'</li>' : ''; ?>
+			    <?php echo $mailbutton   ? '<li>'.$mailbutton.'</li>' : ''; ?>
+			    <?php echo $printbutton  ? '<li>'.$printbutton.'</li>' : ''; ?>
+			    <?php echo $editbutton   ? '<li>'.$editbutton.'</li>' : ''; ?>
+			    <?php echo $deletebutton   ? '<li>'.$deletebutton.'</li>' : ''; ?>
+			    <?php echo $approvalbutton  ? '<li>'.$approvalbutton.'</li>' : ''; ?>
+			  </ul>
+		    <?php echo $statebutton; ?>
+			</div>
+
+			<?php else : ?>
+			<div class="buttons">
+				<?php echo $pdfbutton; ?>
+				<?php echo $mailbutton; ?>
+				<?php echo $printbutton; ?>
+				<?php echo $editbutton; ?>
+				<?php echo $deletebutton; ?>
+				<?php echo $statebutton; ?>
+				<?php echo $approvalbutton; ?>
+			</div>
+			<?php endif; ?>
+			<!-- EOF buttons -->
+			
 		<?php endif; ?>
 	<?php endif; ?>
 	
-	<?php if ( $this->params->get( 'show_page_heading', 1 ) ) : ?>
+	<?php if ( $page_heading_shown ) : ?>
 		<!-- BOF page heading -->
 		<h1 class="componentheading">
 			<?php echo $this->params->get('page_heading'); ?>
@@ -130,22 +157,24 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 	
 	<?php if ($this->params->get('show_title', 1)) : ?>
 		<!-- BOF item title -->
-		<?php echo '<h'.$itemTitleHeaderLevel; ?> class="contentheading"><span class="fc_item_title">
+		<?php echo '<h'.$itemTitleHeaderLevel; ?> class="contentheading">
+			<span class="fc_item_title" itemprop="name">
 			<?php
-				echo ( mb_strlen($item->title, 'utf-8') > $this->params->get('title_cut_text',200) ) ?
-					mb_substr ($item->title, 0, $this->params->get('title_cut_text',200), 'utf-8') . ' ...'  :  $item->title;
+				echo ( StringHelper::strlen($item->title) > $this->params->get('title_cut_text',200) ) ?
+					StringHelper::substr($item->title, 0, $this->params->get('title_cut_text',200)) . ' ...'  :  $item->title;
 			?>
-		</span><?php echo '</h'.$itemTitleHeaderLevel; ?>>
+			</span>
+		<?php echo '</h'.$itemTitleHeaderLevel; ?>>
 		<!-- EOF item title -->
 	<?php endif; ?>
 	
 	
   <?php if ($item->event->afterDisplayTitle) : ?>
-	  <!-- BOF afterDisplayTitle -->
+		<!-- BOF afterDisplayTitle -->
 		<div class="fc_afterDisplayTitle group">
 			<?php echo $item->event->afterDisplayTitle; ?>
 		</div>
-	  <!-- EOF afterDisplayTitle -->
+		<!-- EOF afterDisplayTitle -->
 	<?php endif; ?>
 	
 	
@@ -153,7 +182,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 		<!-- BOF subtitle1 block -->
 		<div class="flexi lineinfo subtitle1 group">
 			<?php foreach ($item->positions['subtitle1'] as $field) : ?>
-			<div class="flexi element">
+			<div class="flexi element field_<?php echo $field->name; ?>">
 				<?php if ($field->label) : ?>
 				<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 				<?php endif; ?>
@@ -169,7 +198,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 		<!-- BOF subtitle2 block -->
 		<div class="flexi lineinfo subtitle2 group">
 			<?php foreach ($item->positions['subtitle2'] as $field) : ?>
-			<div class="flexi element">
+			<div class="flexi element field_<?php echo $field->name; ?>">
 				<?php if ($field->label) : ?>
 				<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 				<?php endif; ?>
@@ -185,7 +214,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 		<!-- BOF subtitle3 block -->
 		<div class="flexi lineinfo subtitle3 group">
 			<?php foreach ($item->positions['subtitle3'] as $field) : ?>
-			<div class="flexi element">
+			<div class="flexi element field_<?php echo $field->name; ?>">
 				<?php if ($field->label) : ?>
 				<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 				<?php endif; ?>
@@ -205,7 +234,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 	
 	<?php
 		// Find if at least one tabbed position is used
-		$tabcount = 6; $createtabs = false;
+		$tabcount = 12; $createtabs = false;
 		for ($tc=1; $tc<=$tabcount; $tc++) {
 			$createtabs = @$createtabs ||  isset($item->positions['subtitle_tab'.$tc]);
 		}
@@ -229,7 +258,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 				<h3 class="tabberheading"><?php echo $tabpos_label; ?></h3><!-- tab title -->
 				<div class="flexi lineinfo">
 					<?php foreach ($item->positions[$tabpos_name] as $field) : ?>
-					<div class="flexi element">
+					<div class="flexi element field_<?php echo $field->name; ?>">
 						<?php if ($field->label) : ?>
 						<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 						<?php endif; ?>
@@ -304,9 +333,9 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 		<div class="description group">
 			<?php foreach ($item->positions['description'] as $field) : ?>
 				<?php if ($field->label) : ?>
-			<div class="desc-title"><?php echo $field->label; ?></div>
+			<div class="desc-title label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></div>
 				<?php endif; ?>
-			<div class="desc-content"><?php echo $field->display; ?></div>
+			<div class="desc-content field_<?php echo $field->name; ?>"><?php echo $field->display; ?></div>
 			<?php endforeach; ?>
 		</div>
 		<!-- EOF description -->
@@ -318,7 +347,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 	
 	<?php
 		// Find if at least one tabbed position is used
-		$tabcount = 6; $createtabs = false;
+		$tabcount = 12; $createtabs = false;
 		for ($tc=1; $tc<=$tabcount; $tc++) {
 			$createtabs = @$createtabs ||  isset($item->positions['bottom_tab'.$tc]);
 		}
@@ -342,7 +371,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 				<h3 class="tabberheading"><?php echo $tabpos_label; ?></h3><!-- tab title -->
 				<div class="flexi lineinfo">
 					<?php foreach ($item->positions[$tabpos_name] as $field) : ?>
-					<div class="flexi element">
+					<div class="flexi element field_<?php echo $field->name; ?>">
 						<?php if ($field->label) : ?>
 						<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 						<?php endif; ?>

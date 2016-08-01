@@ -72,7 +72,7 @@ function tabberObj(argsObj)
   /* Elements that might contain the title for the tab, only used if a
      title is not specified in the TITLE attribute of DIV classTab.
   */
-  this.titleElements = ['h2','h3','h4','h5','h6'];
+  this.titleElements = ['h3','h2','h4','h5','h6'];
 
   /* Should we strip out the HTML from the innerHTML of the title elements?
      This should usually be true.
@@ -186,10 +186,10 @@ tabberObj.prototype.init = function(e)
       this.tabs[this.tabs.length] = t;
 
       /* If the class name contains classTabDefault,
-	 then select this tab by default.
+         then select this tab by default.
       */
       if (childNodes[i].className.match(this.REclassTabDefault)) {
-	defaultTab = this.tabs.length-1;
+        defaultTab = this.tabs.length-1;
       }
     }
   }
@@ -197,7 +197,9 @@ tabberObj.prototype.init = function(e)
   /* Create a new UL list to hold the tab headings */
   DOM_ul = document.createElement("ul");
   DOM_ul.className = this.classNav;
-  
+
+	var decode_entities = document.createElement("textarea");  // used to decode html entities
+	
   /* Loop through each tab we found */
   for (i=0; i < this.tabs.length; i++) {
 
@@ -209,27 +211,39 @@ tabberObj.prototype.init = function(e)
        Or use an automatically generated number.
      */
     t.headingText = t.div.title;
-
+    t.headingTitle = '';
+    t.headingIconClass = t.div.getAttribute('data-icon-class');
+    t.headingPrefixTxt = t.div.getAttribute('data-prefix-text');
+    
     /* Remove the title attribute to prevent a tooltip from appearing */
     if (this.removeTitle) { t.div.title = ''; }
 
+    var tab_classes = '';
     if (!t.headingText) {
 
       /* Title was not defined in the title of the DIV,
-	 So try to get the title from an element within the DIV.
-	 Go through the list of elements in this.titleElements
-	 (typically heading elements ['h2','h3','h4'])
+         So try to get the title from an element within the DIV.
+         Go through the list of elements in this.titleElements
+        (typically heading elements ['h2','h3','h4'])
       */
       for (i2=0; i2<this.titleElements.length; i2++) {
-	headingElement = t.div.getElementsByTagName(this.titleElements[i2])[0];
-	if (headingElement) {
-	  t.headingText = headingElement.innerHTML;
-	  if (this.titleElementsStripHTML) {
-	    t.headingText.replace(/<br>/gi," ");
-	    t.headingText = t.headingText.replace(/<[^>]+>/g,"");
-	  }
-	  break;
-	}
+        headingElement = t.div.getElementsByTagName(this.titleElements[i2])[0];
+        if (headingElement) {
+          decode_entities.innerHTML = headingElement.innerHTML;
+					t.headingText = decode_entities.value;
+          t.headingTitle = headingElement.title;
+          if (typeof jQuery != 'undefined') {
+            tab_classes=jQuery(headingElement).attr('class');
+          }
+          if (this.titleElementsStripHTML) {
+            t.headingText.replace(/<br>/gi,"[br]");
+            t.headingText.replace(/<br\/>/gi,"[br]");
+            t.headingText.replace(/<br \/>/gi,"[br]");
+            t.headingText = t.headingText.replace(/<[^>]+>/g,"");
+            t.headingText = t.headingText.replace(/\[br\]/g,"<br/>");
+          }
+          break;
+        }
       }
     }
 
@@ -249,10 +263,19 @@ tabberObj.prototype.init = function(e)
 
     /* Create a link to activate the tab */
     DOM_a = document.createElement("a");
+    if (t.headingIconClass) {
+    	var icon = document.createElement("i");
+    	icon.setAttribute('class', t.headingIconClass);
+    	DOM_a.appendChild(icon);
+    	DOM_a.appendChild(document.createTextNode(' '));
+    }
     DOM_a.appendChild(document.createTextNode(t.headingText));
     DOM_a.href = "javascript:void(null);";
-    DOM_a.title = t.headingText;
+    DOM_a.title = t.headingTitle;
     DOM_a.onclick = this.navClick;
+    if (typeof jQuery != 'undefined') {
+    	jQuery(DOM_a).addClass(tab_classes);
+    }
 
     /* Add some properties to the link so we can identify which tab
        was clicked. Later the navClick method will need this.
@@ -274,6 +297,13 @@ tabberObj.prototype.init = function(e)
     }
 
     /* Add the link to the list element */
+    if (t.headingPrefixTxt) {
+    	var span = document.createElement("span");
+    	span.setAttribute('class', 'label');
+    	span.appendChild(document.createTextNode(t.headingPrefixTxt));
+    	DOM_li.appendChild(span);
+    	DOM_li.appendChild(document.createElement("br"));
+    }
     DOM_li.appendChild(DOM_a);
 
     /* Add the list element to the list */
@@ -397,7 +427,15 @@ tabberObj.prototype.tabShow = function(tabberIndex)
   div = this.tabs[tabberIndex].div;
 
   /* Remove classTabHide from the div */
-  div.className = div.className.replace(this.REclassTabHide, '');
+ 	div.className = div.className.replace(this.REclassTabHide, '');
+	
+	/* Use a CSS transition for making tab contents visible */
+ 	/*
+	div.className = div.className.replace(this.REclassTabHide, ' tabbertablow');
+	setTimeout(function(){
+		div.className = div.className.replace(' tabbertablow', '');
+	}, 10);
+	*/
 
   /* Mark this tab navigation link as "active" */
   this.navSetActive(tabberIndex);
@@ -439,7 +477,7 @@ tabberObj.prototype.navClearActive = function(tabberIndex)
 /*==================================================*/
 
 
-function tabberAutomatic(tabberArgs)
+function tabberAutomatic(tabberArgs, container_id)
 {
   /* This function finds all DIV elements in the document where
      class=tabber.classMain, then converts them to use the tabber
@@ -460,13 +498,21 @@ function tabberAutomatic(tabberArgs)
   /* Find all DIV elements in the document that have class=tabber */
 
   /* First get an array of all DIV elements and loop through them */
-  divs = document.getElementsByTagName("div");
-  for (i=0; i < divs.length; i++) {
-    
+  var divs = new Array();
+  if (typeof container_id != 'undefined')	{
+	  var i = 0;
+  	jQuery('#'+container_id+' div').each(function() {
+  		divs[i] = jQuery(this).get(0);
+  		i++;
+  	});
+  } else {
+ 		divs = document.getElementsByTagName("div");
+	}
+  for (i=0; i < divs.length; i++)
+  {
     /* Is this DIV the correct class? */
-    if (divs[i].className &&
-	divs[i].className.match(tempObj.REclassMain)) {
-      
+    if (divs[i].className && divs[i].className.match(tempObj.REclassMain))
+    {
       /* Now tabify the DIV */
       tabberArgs.div = divs[i];
       divs[i].tabber = new tabberObj(tabberArgs);

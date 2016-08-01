@@ -26,7 +26,7 @@ var itemscreen = new Class(
 			dooptions = options;
 		}
 		
-		var loader_html = '<p class="qf_centerimg"><img src="components/com_flexicontent/assets/images/ajax-loader.gif" align="center"></p>';
+		var loader_html = '<p><img src="components/com_flexicontent/assets/images/ajax-loader.gif" align="center"></p>';
 		var url_to_load = this.options.script_url + "&task=" + this.options.task + "&id=" + this.options.id;
 		
 		if (MooTools.version>='1.2.4') {
@@ -61,7 +61,10 @@ var itemscreen = new Class(
 		    onSuccess: function(responseText){
 					myvar = responseText[0].wholeText.split("|");
 					if( ((typeof myvar[0])!="undefined") && (typeof myvar[1]!="undefined") ) {
-						addToList(myvar[0], myvar[1]);
+						if (myvar[0]!='0')
+							addToList(myvar[0], myvar[1]);
+						else
+							alert(myvar[1]);
 					}
 		    },
 		    onFailure: function(){
@@ -87,7 +90,7 @@ var itemscreen = new Class(
 	reseter: function( task, id, div, url )
 	{
 		var doname = div;
-		var loader_html = '<p class="qf_centerimg"><img src="components/com_flexicontent/assets/images/ajax-loader.gif" align="center"></p>';
+		var loader_html = '<p><img src="components/com_flexicontent/assets/images/ajax-loader.gif" align="center"></p>';
 	  var url = url+'&format=raw&task='+task+'&id='+id;
 		if (MooTools.version>='1.2.4') {
 			$(doname).set('html', loader_html);

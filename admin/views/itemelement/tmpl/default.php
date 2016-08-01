@@ -19,61 +19,118 @@
 defined('_JEXEC') or die('Restricted access');
 $app = JFactory::getApplication();
 $option = JRequest::getVar('option');
-$langparent_item  = $app->getUserStateFromRequest( $option.'.itemelement.langparent_item', 'langparent_item', 0, 'int' );
-$type_id  = $app->getUserStateFromRequest( $option.'.itemelement.type_id', 'type_id', 0, 'int' );
+
+$tip_class = FLEXI_J30GE ? ' hasTooltip' : ' hasTip';
+$btn_class = FLEXI_J30GE ? 'btn' : 'fc_button fcsimple';
 ?>
+
+<script>
+// delete active filter
+function delFilter(name)
+{
+	//if(window.console) window.console.log('Clearing filter:'+name);
+	var myForm = jQuery('#adminForm');
+	var filter = jQuery('#'+name);
+	if (filter.attr('type')=='checkbox')
+		filter.checked = '';
+	else
+		filter.val('');
+}
+
+function delAllFilters() {
+	delFilter('search'); delFilter('filter_type'); delFilter('filter_state');
+	delFilter('filter_cats'); delFilter('filter_author'); delFilter('filter_id');
+	delFilter('startdate'); delFilter('enddate'); delFilter('filter_lang');
+	delFilter('filter_tag'); delFilter('filter_access');
+	jQuery('#filter_subcats').val('1');
+	jQuery('.fc_field_filter').val('');
+}
+</script>
+
+<div id="flexicontent" class="flexicontent">
 
 <form action="index.php?option=com_flexicontent&amp;view=itemelement&amp;tmpl=component&object=<?= JRequest::getVar('object',''); ?>" method="post" name="adminForm" id="adminForm">
 
-<table class="adminform">
-	<tr>
-		<td width="100%">
-			<?php echo JText::_( 'FLEXI_SEARCH' ); ?>
-			<input type="text" name="search" id="search" value="<?php echo $this->lists['search']; ?>" class="text_area" onChange="document.adminForm.submit();" />
-			<div id="fc-filter-buttons">
-				<button onclick="this.form.submit();"><?php echo JText::_( 'FLEXI_GO' ); ?></button>
-				<button onclick="this.form.getElementById('search').value='';this.form.submit();"><?php echo JText::_( 'FLEXI_RESET' ); ?></button>
-			</div>
-		</td>
-		<td nowrap="nowrap">
-			<?php if ( !$type_id) : ?>
-				<?php echo $this->lists['filter_type'];	?>
+	<div id="fc-filters-header">
+		<span class="fc-filter nowrap_box">
+			<span class="filter-search btn-group">
+				<input type="text" name="search" id="search" placeholder="<?php echo JText::_( 'FLEXI_SEARCH' ); ?>" value="<?php echo htmlspecialchars($this->lists['search'], ENT_QUOTES, 'UTF-8'); ?>" class="inputbox" />
+			</span>
+			<span class="btn-group hidden-phone">
+				<button title="<?php echo JText::_('FLEXI_APPLY_FILTERS'); ?>" class="<?php echo $btn_class; ?>" onclick="document.adminForm.limitstart.value=0; Joomla.submitform();"><?php echo FLEXI_J30GE ? '<i class="icon-search"></i>' : JText::_('FLEXI_GO'); ?></button>
+				<button title="<?php echo JText::_('FLEXI_RESET_FILTERS'); ?>" class="<?php echo $btn_class; ?>" onclick="document.adminForm.limitstart.value=0; delAllFilters(); Joomla.submitform();"><?php echo FLEXI_J30GE ? '<i class="icon-remove"></i>' : JText::_('FLEXI_CLEAR'); ?></button>
+			</span>
+		</span>
+		
+		<span class="fc-filter nowrap_box">
+			<span class="limit nowrap_box" style="display: inline-block;">
+				<label class="label">
+					<?php echo JText::_('JGLOBAL_DISPLAY_NUM'); ?>
+				</label>
+				<?php
+				$pagination_footer = $this->pagination->getListFooter();
+				if (strpos($pagination_footer, '"limit"') === false) echo $this->pagination->getLimitBox();
+				?>
+			</span>
+			
+			<span class="fc_item_total_data nowrap_box badge badge-info">
+				<?php echo @$this->resultsCounter ? $this->resultsCounter : $this->pagination->getResultsCounter(); // custom Results Counter ?>
+			</span>
+			
+			<?php if (($getPagesCounter = $this->pagination->getPagesCounter())): ?>
+			<span class="fc_pages_counter nowrap_box fc-mssg-inline fc-info fc-nobgimage">
+				<?php echo $getPagesCounter; ?>
+			</span>
 			<?php endif; ?>
-			<?php echo $this->lists['filter_cats'];	?>
-			<?php if ((FLEXI_FISH || FLEXI_J16GE) && !$langparent_item) : ?>
-				<?php echo $this->lists['filter_lang']; ?>
-			<?php endif; ?>
-			<?php echo $this->lists['state'];	?>
-		</td>
-	</tr>
-</table>
+		</span>
+	</div>
+	
+	<div id="fc-filters-box">
+		<span class="fc-filter nowrap_box">
+			<?php echo $this->lists['filter_type'];	?>
+		</span>
+		
+		<span class="fc-filter nowrap_box">
+		<?php echo $this->lists['filter_lang']; ?>
+		</span>
+		
+		<span class="fc-filter nowrap_box">
+		<?php echo $this->lists['filter_author']; ?>
+		</span>
+		
+		<span class="fc-filter nowrap_box">
+		<?php echo $this->lists['filter_cats']; ?>
+		</span>
+		
+		<span class="fc-filter nowrap_box">
+		<?php echo $this->lists['filter_state']; ?>
+		</span>
+		
+		<span class="fc-filter nowrap_box">
+		<?php echo $this->lists['filter_access']; ?>
+		</span>
+	</div>
 
 
 
-	<table class="adminlist" cellspacing="1">
+	<table class="adminlist">
 	<thead>
 		<tr>
 			<th width="5"><?php echo JText::_( 'FLEXI_NUM' ); ?></th>
-			<th class="title">
-				<?php echo JHTML::_('grid.sort', 'FLEXI_TITLE', 'i.title', $this->lists['order_Dir'], $this->lists['order'] ); ?>
-			</th>
-			<th width="1%" nowrap="nowrap">
-				<?php echo JHTML::_('grid.sort', 'FLEXI_TYPE_NAME', 'type_name', $this->lists['order_Dir'], $this->lists['order'] ); ?>
-			</th>
-			<?php if (FLEXI_FISH || FLEXI_J16GE) : ?>
-			<th width="50px" nowrap="nowrap">
-				<?php echo JHTML::_('grid.sort', 'FLEXI_LANGUAGE', 'lang', $this->lists['order_Dir'], $this->lists['order'] ); ?>
-			</th>
-			<?php endif; ?>
+			<th class="title"><?php echo JHTML::_('grid.sort', 'FLEXI_TITLE', 'i.title', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
+			<th width="1%" nowrap="nowrap"><?php echo JHTML::_('grid.sort', 'FLEXI_TYPE_NAME', 'type_name', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
+			<th width="1%" nowrap="nowrap"><?php echo JHTML::_('grid.sort', 'FLEXI_AUTHOR', 'author', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
 			<th width="1%" nowrap="nowrap"><?php echo JText::_( 'FLEXI_STATE' ); ?></th>
+			<th width="7%"><?php echo JHTML::_('grid.sort', 'FLEXI_ACCESS', 'i.access', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
+			<th width="50px" nowrap="nowrap"><?php echo JHTML::_('grid.sort', 'FLEXI_LANGUAGE', 'lang', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
 			<th width="1%" nowrap="nowrap"><?php echo JHTML::_('grid.sort', 'FLEXI_ID', 'i.id', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
 		</tr>
 	</thead>
 
 	<tfoot>
 		<tr>
-			<td colspan="<?php echo (FLEXI_FISH || FLEXI_J16GE) ? 5 : 4; ?>">
-				<?php echo $this->pageNav->getListFooter(); ?>
+			<td colspan="6">
+				<?php echo $this->pagination->getListFooter(); ?>
 			</td>
 		</tr>
 	</tfoot>
@@ -113,46 +170,59 @@ $type_id  = $app->getUserStateFromRequest( $option.'.itemelement.type_id', 'type
 				}
    		?>
 		<tr class="<?php echo "row$k"; ?>">
-			<td><?php echo $this->pageNav->getRowOffset( $i ); ?></td>
+			
+			<td><?php echo $this->pagination->getRowOffset( $i ); ?></td>
+			
 			<td align="left">
-					<span class="editlinktip hasTip" title="<?php echo JText::_( 'FLEXI_EDIT_ITEM' );?>::<?php echo $row->title; ?>">
-					<?php if(JRequest::getVar('object','')==''): ?>
-					<a style="cursor:pointer" onclick="window.parent.qfSelectItem('<?php echo $row->id; ?>', '<?php echo $this->filter_cats ? $this->filter_cats : $row->catid; ?>', '<?php echo str_replace( array("'", "\""), array("\\'", ""), $row->title ); ?>');">
-					<?php else: ?>
+				<span class="<?php echo $tip_class; ?>" title="<?php echo JHtml::tooltipText(JText::_( 'FLEXI_EDIT_ITEM' ), $row->title, 0, 1); ?>">
+				<?php if(JRequest::getVar('object','')==''): ?>
+					<a style="cursor:pointer" onclick="window.parent.fcSelectItem('<?php echo $row->id; ?>', '<?php echo $this->filter_cats ? $this->filter_cats : $row->catid; ?>', '<?php echo str_replace( array("'", "\""), array("\\'", ""), $row->title ); ?>');">
+				<?php else: ?>
 					<a style="cursor:pointer" onclick="window.parent.jSelectArticle('<?php echo $row->id; ?>', '<?php echo str_replace( array("'", "\""), array("\\'", ""), $row->title ); ?>', '<?php echo JRequest::getVar('object',''); ?>');">
-					<?php endif; ?>
-					<?php echo htmlspecialchars($row->title, ENT_QUOTES, 'UTF-8'); ?>
-					</a></span>
-			</td>
-			
-			<td align="center" class="col_type">
-				<?php echo $row->type_name; ?>
-			</td>
-			
-		<?php if ( (FLEXI_FISH || FLEXI_J16GE) ): ?>
-			<td align="center" class="hasTip col_lang" title="<?php echo JText::_( 'FLEXI_LANGUAGE' ).'::'.($row->lang=='*' ? JText::_("All") : (!empty($row->lang) ? $this->langs->{$row->lang}->name : '')); ?>">
-				
-				<?php if ( !empty($row->lang) && !empty($this->langs->{$row->lang}->imgsrc) ) : ?>
-					<img src="<?php echo $this->langs->{$row->lang}->imgsrc; ?>" alt="<?php echo $row->lang; ?>" />
-				<?php elseif( !empty($row->lang) ) : ?>
-					<?php echo $row->lang=='*' ? JText::_("All") : $row->lang;?>
 				<?php endif; ?>
-				
+						<?php echo htmlspecialchars($row->title, ENT_QUOTES, 'UTF-8'); ?>
+					</a>
+				</span>
 			</td>
-		<?php endif; ?>
-					
+			
+			<td align="center" class="col_type"><?php echo $row->type_name; ?></td>
+			
+			<td align="center"><?php echo $row->author; ?></td>
+			
 			<td align="center">
 				<?php if ($img) : ?>
 					<img src="<?php  echo $app->isAdmin() ? "../" : ""; ?>components/com_flexicontent/assets/images/<?php echo $img;?>" width="16" height="16" border="0" alt="<?php echo $alt; ?>" title="<?php echo $alt; ?>" />
 				<?php endif; ?>
 			</td>
+			
+			<td align="center"><?php echo $row->access_level; ?></td>
+			
+			<td align="center" class="col_lang">
+				
+				<?php if ( 0 && !empty($row->lang) && !empty($this->langs->{$row->lang}->imgsrc) ) : ?>
+					<img class="<?php echo $tip_class; ?>" title="<?php echo flexicontent_html::getToolTip(JText::_( 'FLEXI_LANGUAGE' ), ($row->lang=='*' ? JText::_("All") : (!empty($row->lang) ? $this->langs->{$row->lang}->name : '')), 0, 1); ?>"
+						src="<?php echo $this->langs->{$row->lang}->imgsrc; ?>" alt="<?php echo $row->lang; ?>" />
+				<?php elseif( !empty($row->lang) ) : ?>
+					<?php echo ($row->lang=='*'  ?  JText::_("All")  :  (!empty($row->lang) ? $this->langs->{$row->lang}->name : '')); ?>
+				<?php endif; ?>
+				
+			</td>
+			
 			<td align="center"><?php echo $row->id; ?></td>
+			
 		</tr>
-		<?php $k = 1 - $k; } ?>
+		<?php
+			$k = 1 - $k;
+		}
+		?>
 	</tbody>
 
 	</table>
 	<input type="hidden" name="task" value="" />
-	<input type="hidden" name="filter_order" value="<?php echo $this->lists['order']; ?>" />
-	<input type="hidden" name="filter_order_Dir" value="<?php echo $this->lists['order_Dir']; ?>" />
+	<input type="hidden" id="filter_order" name="filter_order" value="<?php echo $this->lists['order']; ?>" />
+	<input type="hidden" id="filter_order_Dir" name="filter_order_Dir" value="<?php echo $this->lists['order_Dir']; ?>" />
+	<?php echo $this->assocs_id ? '
+		<input type="hidden" name="assocs_id" value="'.$this->assocs_id.'" />'
+		: ''; ?>
 </form>
+</div>

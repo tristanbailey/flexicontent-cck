@@ -7,10 +7,11 @@
 
 defined('JPATH_BASE') or die;
 
-jimport('joomla.html.html');
-jimport('joomla.form.formfield');
-jimport('joomla.form.helper');
-JFormHelper::loadFieldClass('list');
+jimport('cms.html.html');      // JHtml
+jimport('cms.html.select');    // JHtmlSelect
+
+jimport('joomla.form.helper'); // JFormHelper
+JFormHelper::loadFieldClass('list');   // JFormFieldList
 
 /**
  * Form Field class for the Joomla Framework.
@@ -19,7 +20,8 @@ JFormHelper::loadFieldClass('list');
  * @subpackage	com_categories
  * @since		1.6
  */
-class JFormFieldCategoryTree extends JFormFieldList{
+class JFormFieldCategoryTree extends JFormFieldList
+{
 	/**
 	 * The form field type.
 	 *
@@ -108,10 +110,7 @@ class JFormFieldCategoryTree extends JFormFieldList{
 
 		//$usercats 		= FAccess::checkUserCats($user->gmid);
 		$usercats		= array();
-		//$viewallcats 	= ($user->gid < 25) ? FAccess::checkComponentAccess('com_flexicontent', 'usercats', 'users', $user->gmid) : 1;
 		$viewallcats 	= $permission->ViewAllCats;
-		//$viewtree 		= ($user->gid < 25) ? FAccess::checkComponentAccess('com_flexicontent', 'cattree', 'users', $user->gmid) : 1;
-		$viewtree 		= $permission->ViewTree;
 
 		$catlist 	= array();
 		$top = (int)$this->element->getAttribute('top');
@@ -127,7 +126,7 @@ class JFormFieldCategoryTree extends JFormFieldList{
 			$obj = new stdClass;
 			$obj->value = '';
 			$obj->level = 0;
-			$obj->text = JText::_( 'FLEXI_SELECT_CAT' );
+			$obj->text = JText::_( 'FLEXI_SELECT_CATEGORY' );
 			$catlist[] 	= $obj;
 		}
 		
@@ -153,8 +152,7 @@ class JFormFieldCategoryTree extends JFormFieldList{
 						}
 					} else {
 						$item->treename = str_replace("&nbsp;", "_", strip_tags($item->treename));
-						// FLEXIaccess rule $viewtree enables tree view
-						$catlist[] = JHTML::_( 'select.option', $item->id, ($viewtree ? $item->treename : $item->title) );
+						$catlist[] = JHTML::_( 'select.option', $item->id, $item->treename );
 					}
 				} else {
 					$obj = new stdClass;

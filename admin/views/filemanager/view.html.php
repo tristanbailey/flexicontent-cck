@@ -16,10 +16,10 @@
  * GNU General Public License for more details.
  */
 
-// no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
+use Joomla\String\StringHelper;
 
 /**
  * HTML View class for the Filemanager View
@@ -31,54 +31,124 @@ jimport('joomla.application.component.view');
 class FlexicontentViewFilemanager extends JViewLegacy
 {
 	/**
-	 * Creates the Filemanagerview
+	 * Creates the Filemanager view
 	 *
 	 * @since 1.0
 	 */
 	function display( $tpl = null )
 	{
-		flexicontent_html::loadJQuery();
-		flexicontent_html::loadFramework('select2');
-		JHTML::_('behavior.tooltip');
-		// Load the form validation behavior
-		JHTML::_('behavior.formvalidation');
+		// ********************
+		// Initialise variables
+		// ********************
 		
-		//initialise variables
-		$app      = JFactory::getApplication();
-		$option   = JRequest::getVar('option');
-		$document = JFactory::getDocument();
-		$db       = JFactory::getDBO();
+		$app     = JFactory::getApplication();
+		$jinput  = $app->input;
+		
+		$layout  = $jinput->get('layout', 'default', 'cmd');
+		$option  = $jinput->get('option', '', 'cmd');
+		$view    = $jinput->get('view', '', 'cmd');
+		
+		$cparams  = JComponentHelper::getParams( 'com_flexicontent' );
 		$user     = JFactory::getUser();
-		$params   = JComponentHelper::getParams('com_flexicontent');
+		$db       = JFactory::getDBO();
+		$document = JFactory::getDocument();
+		
+		// Get model
+		$model = $this->getModel();
+		
 		//$authorparams = flexicontent_db::getUserConfig($user->id);
 		$langs = FLEXIUtilities::getLanguages('code');
 		
-		//get vars
-		$filter_order		= $app->getUserStateFromRequest( $option.'.filemanager.filter_order', 	'filter_order', 	'f.filename', 	'cmd' );
-		$filter_order_Dir	= $app->getUserStateFromRequest( $option.'.filemanager.filter_order_Dir',	'filter_order_Dir',	'', 			'word' );
-		$filter 				= $app->getUserStateFromRequest( $option.'.filemanager.filter', 				'filter', 				1, 			'int' );
-		$filter_lang		= $app->getUserStateFromRequest( $option.'.filemanager.filter_lang', 		'filter_lang', 		'', 		'string' );
-		$filter_uploader= $app->getUserStateFromRequest( $option.'.filemanager.filter_uploader','filter_uploader',0,			'int' );
-		$filter_url			= $app->getUserStateFromRequest( $option.'.filemanager.filter_url', 		'filter_url', 		'',			'word' );
-		$filter_secure	= $app->getUserStateFromRequest( $option.'.filemanager.filter_secure', 	'filter_secure', 	'', 		'word' );
-		$filter_ext			= $app->getUserStateFromRequest( $option.'.filemanager.filter_ext', 		'filter_ext', 		'', 		'alnum' );
-		$search 				= $app->getUserStateFromRequest( $option.'.filemanager.search', 				'search', 				'', 		'string' );
-		$filter_item 		= $app->getUserStateFromRequest( $option.'.filemanager.item_id', 				'item_id', 				0,	 		'int' );
-		$folder_mode			= 0;
-		$search				= FLEXI_J16GE ? $db->escape( trim(JString::strtolower( $search ) ) ) : $db->getEscaped( trim(JString::strtolower( $search ) ) );
 		
-		//add css and submenu to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
+		flexicontent_html::loadJQuery();
+		flexicontent_html::loadFramework('select2');
+		//JHTML::_('behavior.tooltip');
+		// Load the form validation behavior
+		JHTML::_('behavior.formvalidation');
 		
-		// Get User's Global Permissions
+		
+		// Get user's global permissions
 		$perms = FlexicontentHelperPerm::getPerm();
 		
+		// Get folder mode
+		$_view = $view;
+		$folder_mode = 0;
+		
+		
+		
+		// ***********
+		// Get filters
+		// ***********
+		
+		$count_filters = 0;
+		
+		// Order and order direction
+		$filter_order      = $model->getState('filter_order');
+		$filter_order_Dir  = $model->getState('filter_order_Dir');
+		
+		$filter_lang			= $app->getUserStateFromRequest( $option.'.'.$_view.'.filter_lang',      'filter_lang',      '',          'string' );
+		$filter_url       = $app->getUserStateFromRequest( $option.'.'.$_view.'.filter_url',       'filter_url',       '',          'word' );
+		$filter_secure    = $app->getUserStateFromRequest( $option.'.'.$_view.'.filter_secure',    'filter_secure',    '',          'word' );
+		
+		$target_dir = $layout=='image' ? 0 : 2;  // 0: Force media, 1: force secure, 2: allow selection
+		$optional_cols = array('access', 'target', 'state', 'lang', 'uploader', 'upload_time', 'file_id', 'hits', 'usage');
+		$cols = array();
+		// No column disabling for filemanager YET, column disabling only in fileselement view
+		foreach($optional_cols as $col) $cols[$col] = 1;
+		
+		
+		$filter_ext       = $app->getUserStateFromRequest( $option.'.'.$_view.'.filter_ext',       'filter_ext',       '',          'alnum' );
+		$filter_uploader  = $app->getUserStateFromRequest( $option.'.'.$_view.'.filter_uploader',  'filter_uploader',  '',           'int' );
+		$filter_item      = $app->getUserStateFromRequest( $option.'.'.$_view.'.item_id',          'item_id',          '',           'int' );
+		
+		if ($layout!='image') {
+			if ($filter_lang) $count_filters++;
+			if ($filter_url) $count_filters++;
+			if ($filter_secure) $count_filters++;
+		}
+		
+		// ?? Force unsetting language and target_dir columns if LAYOUT is image file list
+		else
+		{
+			unset($cols['lang']);
+			unset($cols['target']);
+		}
+		
+		// Case of uploader column not applicable or not allowed
+		if (!$folder_mode && !$perms->CanViewAllFiles) unset($this->cols['uploader']);
+		
+		if ($filter_ext) $count_filters++;
+		if ($filter_uploader && !empty($this->cols['uploader'])) $count_filters++;
+		if ($filter_item) $count_filters++;
+		
+		// Text search
+		$scope  = $model->getState( 'scope' );
+		$search = $model->getState( 'search' );
+		$search = $db->escape( StringHelper::trim(StringHelper::strtolower( $search ) ) );
+		
+		$filter_uploader  = $filter_uploader ? $filter_uploader : '';
+		$filter_item      = $filter_item ? $filter_item : '';
+		
+		
+		
+		
 		// **************************
-		// Create Submenu and toolbar
+		// Add css and js to document
 		// **************************
+		
+		$app->isSite() ?
+			$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH) :
+			$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
+		
+		
+		
+		// ************************
+		// Create Submenu & Toolbar
+		// ************************
+		
+		// Create Submenu (and also check access to current view)
 		FLEXISubmenu('CanFiles');
 		
 		// Create document/toolbar titles
@@ -88,29 +158,17 @@ class FlexicontentViewFilemanager extends JViewLegacy
 		$document->setTitle($doc_title .' - '. $site_title);
 		
 		// Create the toolbar
-		if (FLEXI_J16GE) {
-			JToolBarHelper::deleteList('Are you sure?', 'filemanager.remove');
-		} else {
-			JToolBarHelper::deleteList();
-		}
-		if ($perms->CanConfig) {
-			JToolBarHelper::divider(); JToolBarHelper::spacer();
-			$session = JFactory::getSession();
-			$fc_screen_width = (int) $session->get('fc_screen_width', 0, 'flexicontent');
-			$_width  = ($fc_screen_width && $fc_screen_width-84 > 940 ) ? ($fc_screen_width-84 > 1400 ? 1400 : $fc_screen_width-84 ) : 940;
-			$fc_screen_height = (int) $session->get('fc_screen_height', 0, 'flexicontent');
-			$_height = ($fc_screen_height && $fc_screen_height-128 > 550 ) ? ($fc_screen_height-128 > 1000 ? 1000 : $fc_screen_height-128 ) : 550;
-			JToolBarHelper::preferences('com_flexicontent', $_height, $_width, 'Configuration');
-		}
+		$this->setToolbar();
+		
+
 		
 		// ***********************
 		// Get data from the model
 		// ***********************
-		$model   = $this->getModel();
+		
 		if ( !$folder_mode ) {
 			$rows  = $this->get('Data');
 		} else {
-			// TODO MORE ...
 		}
 		$pagination = $this->get('Pagination');
 		//$users = $this->get('Users');
@@ -131,20 +189,16 @@ class FlexicontentViewFilemanager extends JViewLegacy
 		 ** BUILD LISTS **
 		 *****************/
 		
-		$lists 				= array();
+		$lists = array();
 		
 		// ** FILE UPLOAD FORM **
 		
 		// Build languages list
 		//$allowed_langs = !$authorparams ? null : $authorparams->get('langs_allowed',null);
 		//$allowed_langs = !$allowed_langs ? null : FLEXIUtilities::paramToArray($allowed_langs);
-		$display_file_lang_as = $params->get('display_file_lang_as', 3);
+		$display_file_lang_as = $cparams->get('display_file_lang_as', 3);
 		$allowed_langs = null;
-		if (FLEXI_FISH || FLEXI_J16GE) {
-			$lists['file-lang'] = flexicontent_html::buildlanguageslist('file-lang', '', '*', $display_file_lang_as, $allowed_langs, $published_only=false);
-		} else {
-			$lists['file-lang'] = flexicontent_html::getSiteDefaultLang() . '<input type="hidden" name="file-lang" value="'.flexicontent_html::getSiteDefaultLang().'" />';
-		}
+		$lists['file-lang'] = flexicontent_html::buildlanguageslist('file-lang', '', '*', $display_file_lang_as, $allowed_langs, $published_only=false);
 		
 		
 		/*************
@@ -152,24 +206,30 @@ class FlexicontentViewFilemanager extends JViewLegacy
 		 *************/
 		
 		// language filter
-		$lists['language'] = flexicontent_html::buildlanguageslist('filter_lang', 'class="use_select2_lib" onchange="submitform();" size="1" ', $filter_lang, 2);
+		$lists['language'] = ($filter_lang || 1 ? '<label class="label">'.JText::_('FLEXI_LANGUAGE').'</label>' : '').
+			flexicontent_html::buildlanguageslist('filter_lang', 'class="use_select2_lib" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()" size="1" ', $filter_lang, '-'/*2*/);
 		
 		// search
 		$lists['search'] 	= $search;
 		
 		//search filter
 		$filters = array();
+		$filters[] = JHTML::_('select.option', '0', '- '.JText::_( 'FLEXI_ALL' ).' -' );
 		$filters[] = JHTML::_('select.option', '1', JText::_( 'FLEXI_FILENAME' ) );
-		$filters[] = JHTML::_('select.option', '2', JText::_( 'FLEXI_FILE_TITLE' ) );
-		$lists['filter'] = JHTML::_('select.genericlist', $filters, 'filter', 'size="1" class="use_select2_lib"', 'value', 'text', $filter );
-
+		$filters[] = JHTML::_('select.option', '2', JText::_( 'FLEXI_FILE_DISPLAY_TITLE' ) );
+		$filters[] = JHTML::_('select.option', '3', JText::_( 'FLEXI_DESCRIPTION' ) );
+		$lists['scope'] = '
+			<span class="hasTooltip" style="display:inline-block; padding:0; margin:0;" title="'.JText::_('FLEXI_SEARCH_TEXT_INSIDE').'"><i class="icon-info"></i></span>
+			'.JHTML::_('select.genericlist', $filters, 'scope', 'size="1" class="use_select2_lib fc_skip_highlight" onchange="jQuery(\'#search\').attr(\'placeholder\', jQuery(this).find(\'option:selected\').text());" ', 'value', 'text', $scope );
+		
 		//build url/file filterlist
 		$url 	= array();
-		$url[] 	= JHTML::_('select.option',  '', '- '. JText::_( 'FLEXI_ALL_FILES' ) .' -' );
+		$url[] 	= JHTML::_('select.option',  '', '-'/*JText::_( 'FLEXI_ALL_FILES' )*/ );
 		$url[] 	= JHTML::_('select.option',  'F', JText::_( 'FLEXI_FILE' ) );
 		$url[] 	= JHTML::_('select.option',  'U', JText::_( 'FLEXI_URL' ) );
 
-		$lists['url'] = JHTML::_('select.genericlist', $url, 'filter_url', 'class="use_select2_lib" size="1" onchange="submitform( );"', 'value', 'text', $filter_url );
+		$lists['url'] = ($filter_url || 1 ? '<label class="label">'.JText::_('FLEXI_ALL_FILES').'</label>' : '').
+			JHTML::_('select.genericlist', $url, 'filter_url', 'class="use_select2_lib" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', 'value', 'text', $filter_url );
 
 		//item lists
 		/*$items_list = array();
@@ -177,45 +237,52 @@ class FlexicontentViewFilemanager extends JViewLegacy
 		foreach($items as $item) {
 			$items_list[] = JHTML::_('select.option', $item->id, JText::_( $item->title ) . ' (#' . $item->id . ')' );
 		}
-		$lists['item_id'] = JHTML::_('select.genericlist', $items_list, 'item_id', 'size="1" class="use_select2_lib" onchange="submitform( );"', 'value', 'text', $filter_item );*/
-		$lists['item_id'] = '<input type="text" name="item_id" size="1" class="inputbox" onchange="submitform( );" value="'.$filter_item.'" />';
+		$lists['item_id'] = JHTML::_('select.genericlist', $items_list, 'item_id', 'size="1" class="use_select2_lib" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', 'value', 'text', $filter_item );*/
+		$lists['item_id'] = '<input type="text" name="item_id" size="1" class="inputbox" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()" value="'.$filter_item.'" />';
 		
 		//build secure/media filterlist
-		$secure 	= array();
-		$secure[] 	= JHTML::_('select.option',  '', '- '. JText::_( 'FLEXI_ALL_DIRECTORIES' ) .' -' );
-		$secure[] 	= JHTML::_('select.option',  'S', JText::_( 'FLEXI_SECURE_DIR' ) );
-		$secure[] 	= JHTML::_('select.option',  'M', JText::_( 'FLEXI_MEDIA_DIR' ) );
-
-		$lists['secure'] = JHTML::_('select.genericlist', $secure, 'filter_secure', 'class="use_select2_lib" size="1" onchange="submitform( );"', 'value', 'text', $filter_secure );
+		$lists['secure'] = '<i data-placement="bottom" class="icon-info fc-man-icon-s hasTooltip" title="'.flexicontent_html::getToolTip('FLEXI_URL_SECURE', 'FLEXI_URL_SECURE_DESC', 1, 1).'"></i>'
+			.($filter_secure || 1 ? '<label class="label">'.JText::_('FLEXI_URL_SECURE').'</label>' : '');
+		if ($target_dir==2)
+		{
+			$secure 	= array();
+			$secure[] 	= JHTML::_('select.option',  '', '-'/*JText::_( 'FLEXI_ALL_DIRECTORIES' )*/ );
+			$secure[] 	= JHTML::_('select.option',  'S', JText::_( 'FLEXI_SECURE_DIR' ) );
+			$secure[] 	= JHTML::_('select.option',  'M', JText::_( 'FLEXI_MEDIA_DIR' ) );
+			
+			$lists['secure'] .=
+				JHTML::_('select.genericlist', $secure, 'filter_secure', 'class="use_select2_lib" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', 'value', 'text', $filter_secure );
+		}
+		else
+			$lists['secure'] .= '<span class="badge badge-info">'.JText::_($target_dir==0 ? 'FLEXI_MEDIA_DIR' : 'FLEXI_SECURE_DIR').'</span>';
 
 		//build ext filterlist
-		$lists['ext'] = flexicontent_html::buildfilesextlist('filter_ext', 'class="use_select2_lib" size="1" onchange="submitform( );"', $filter_ext);
+		$lists['ext'] = ($filter_ext || 1 ? '<label class="label">'.JText::_('FLEXI_ALL_EXT').'</label>' : '').
+			flexicontent_html::buildfilesextlist('filter_ext', 'class="use_select2_lib" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', $filter_ext, '-'/*1*/);
 
 		//build uploader filterlist
-		$lists['uploader'] = flexicontent_html::builduploaderlist('filter_uploader', 'class="use_select2_lib" size="1" onchange="submitform( );"', $filter_uploader);
+		$lists['uploader'] = ($filter_uploader || 1 ? '<label class="label">'.JText::_('FLEXI_ALL_UPLOADERS').'</label>' : '').
+			flexicontent_html::builduploaderlist('filter_uploader', 'class="use_select2_lib" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', $filter_uploader, '-'/*1*/);
 
 		// table ordering
 		$lists['order_Dir']	= $filter_order_Dir;
 		$lists['order']			= $filter_order;
 		
 		// uploadstuff
-		if ($params->get('enable_flash', 1) && !FLEXI_J30GE) {
-			JHTML::_('behavior.uploader', 'file-upload', array('onAllComplete' => 'function(){ window.location.reload(); }') );
-		}
 		jimport('joomla.client.helper');
 		$ftp = !JClientHelper::hasCredentials('ftp');
 		
 		//assign data to template
-		$this->assignRef('params'     , $params);
+		$this->assignRef('layout', $layout);
+		$this->assignRef('target_dir', $target_dir);
+		$this->assignRef('optional_cols', $optional_cols);
+		$this->assignRef('cols', $cols);
+		$this->assignRef('count_filters', $count_filters);
+		$this->assignRef('params'     , $cparams);
 		$this->assign('require_ftp'		, $ftp);
-		//Load pane behavior
-		if (!FLEXI_J16GE) {
-			jimport('joomla.html.pane');
-			$pane = JPane::getInstance('Tabs');
-			$this->assignRef('pane'       , $pane);
-		}
 		$this->assignRef('lists'      , $lists);
 		$this->assignRef('rows'       , $rows);
+		$this->assignRef('folder_mode', $folder_mode);
 		$this->assignRef('pagination' , $pagination);
 		$this->assignRef('CanFiles'        , $perms->CanFiles);
 		$this->assignRef('CanUpload'       , $perms->CanUpload);
@@ -224,7 +291,60 @@ class FlexicontentViewFilemanager extends JViewLegacy
 		$this->assignRef('assigned_fields_icons'  , $assigned_fields_icons);
 		$this->assignRef('langs', $langs);
 		
+		$this->assignRef('option', $option);
+		$this->assignRef('view', $view);
+
+		$this->sidebar = FLEXI_J30GE ? JHtmlSidebar::render() : null;
+		parent::display($tpl);
+	}
+	
+	
+	/**
+	 * Method to configure the toolbar for this view.
+	 *
+	 * @access	public
+	 * @return	void
+	 */
+	function setToolbar()
+	{
+		$document = JFactory::getDocument();
+		$js = "jQuery(document).ready(function(){";
+		$toolbar = JToolBar::getInstance('toolbar');
+
+		JToolBarHelper::deleteList('Are you sure?', 'filemanager.remove');
+		
+		$btn_task = '';
+		$popup_load_url = JURI::base().'index.php?option=com_flexicontent&view=filemanager&layout=indexer&tmpl=component&indexer=fileman_default';
+		if (FLEXI_J30GE || !FLEXI_J16GE) {  // Layout of Popup button broken in J3.1, add in J1.5 it generates duplicate HTML tag id (... just for validation), so add manually
+			$js .= "
+				jQuery('#toolbar-basicindex a.toolbar, #toolbar-basicindex button')
+					.attr('onclick', 'var url = jQuery(this).attr(\'href\'); fc_showDialog(url, \'fc_modal_popup_container\', 0, 550, 350, function(){document.body.innerHTML=\'<span class=\"fc_loading_msg\">Reloading ... please wait</span>\'; window.location.reload(true)}); return false;')
+					.attr('href', '".$popup_load_url."');
+			";
+			JToolBarHelper::custom( $btn_task, 'basicindex.png', 'basicindex_f2.png', 'Index file statistics', false );
+		} else {
+			$toolbar->appendButton('Popup', 'basicindex', 'Index file statistics', str_replace('&', '&amp;', $popup_load_url), 500, 240);
+		}
+		
+		$user  = JFactory::getUser();
+		$perms = FlexicontentHelperPerm::getPerm();
+		if ($perms->CanConfig) {
+			JToolBarHelper::divider(); JToolBarHelper::spacer();
+			$session = JFactory::getSession();
+			$fc_screen_width = (int) $session->get('fc_screen_width', 0, 'flexicontent');
+			$_width  = ($fc_screen_width && $fc_screen_width-84 > 940 ) ? ($fc_screen_width-84 > 1400 ? 1400 : $fc_screen_width-84 ) : 940;
+			$fc_screen_height = (int) $session->get('fc_screen_height', 0, 'flexicontent');
+			$_height = ($fc_screen_height && $fc_screen_height-128 > 550 ) ? ($fc_screen_height-128 > 1000 ? 1000 : $fc_screen_height-128 ) : 550;
+			JToolBarHelper::preferences('com_flexicontent', $_height, $_width, 'Configuration');
+		}
+		
+		$js .= "});";
+		$document->addScriptDeclaration($js);
+	}
+	
+	
+	function indexer($tpl)
+	{		
 		parent::display($tpl);
 	}
 }
-?>

@@ -18,7 +18,7 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * View class for the FLEXIcontent category screen
@@ -43,13 +43,16 @@ class FlexicontentViewTag extends JViewLegacy
 		$cid 		= JRequest::getVar( 'cid' );
 
 		//add css to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
-		//add js function to overload the joomla submitform
-		//$document->addScript(JURI::root().'components/com_flexicontent/assets/js/admin.js');
-		//$document->addScript(JURI::root().'components/com_flexicontent/assets/js/validate.js');
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
+		// Add JS frameworks
+		//flexicontent_html::loadFramework('select2');
+		
+		// Add js function to overload the joomla submitform validation
+		JHTML::_('behavior.formvalidation');  // load default validation JS to make sure it is overriden
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/admin.js', FLEXI_VHASH);
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/validate.js', FLEXI_VHASH);
 
 		//Get data from the model
 		$model = $this->getModel();
@@ -59,10 +62,10 @@ class FlexicontentViewTag extends JViewLegacy
 		if ( $cid ) {
 			JToolBarHelper::title( JText::_( 'FLEXI_EDIT_TAG' ), 'tagedit' );
 			$base 			= str_replace('administrator/', '', JURI::base());
-			$autologin		= $cparams->get('autoflogin', 1) ? '&fcu='.$user->username . '&fcp='.$user->password : '';
+			$autologin  = ''; // $cparams->get('autoflogin', 1) ? '&fcu='.$user->username . '&fcp='.$user->password : '';
 			// Add a preview button
 			$previewlink 	= $base . JRoute::_(FlexicontentHelperRoute::getTagRoute($row->id)) . $autologin;
-			$bar->appendButton( 'Custom', '<a class="preview" href="'.$previewlink.'" target="_blank"><span title="'.JText::_('Preview').'" class="icon-32-preview"></span>'.JText::_('Preview').'</a>', 'preview' );
+			$bar->appendButton( 'Custom', '<a class="preview" href="'.$previewlink.'" target="_blank"><span title="'.JText::_('FLEXI_PREVIEW').'" class="icon-32-preview"></span>'.JText::_('FLEXI_PREVIEW').'</a>', 'preview' );
 		} else {
 			JToolBarHelper::title( JText::_( 'FLEXI_NEW_TAG' ), 'tagadd' );
 		}
@@ -87,8 +90,8 @@ class FlexicontentViewTag extends JViewLegacy
 			}
 		}
 
-		//clean data
-		JFilterOutput::objectHTMLSafe( $row, ENT_QUOTES );
+		// Encode (UTF-8 charset) HTML entities form data so that they can be set as form field values
+		JFilterOutput::objectHTMLSafe( $row, ENT_QUOTES, $exclude_keys = '' );
 
 		//assign data to template
 		$this->assignRef('row'      	, $row);

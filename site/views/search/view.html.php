@@ -19,7 +19,9 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
+use Joomla\String\StringHelper;
+
 require_once(JPATH_COMPONENT.DS.'helpers'.DS.'search.php' );
 
 /**
@@ -62,7 +64,9 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		// Get various data from the model
 		$areas	=  $this->get('areas');
 		$state	=  $this->get('state');
-		$searchword = $state->get('keyword');
+		$searchword     = $state->get('keyword');
+		$searchphrase   = $state->get('match');
+		$searchordering = $state->get('ordering');
 		
 		
 		// ***********************************************************
@@ -73,7 +77,7 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		
 		// Get if text searching according to specific (single) content type
 		$show_txtfields = $params->get('show_txtfields', 1);  //0:hide, 1:according to content, 2:use custom configuration
-		$show_txtfields = $txtmode ? 0 : $show_txtfields;  // disable this flag if using BASIC index for text search
+		$show_txtfields = !$txtmode ? 0 : $show_txtfields;  // disable this flag if using BASIC index for text search
 		
 		// Get if filtering according to specific (single) content type
 		$show_filters   = $params->get('show_filters', 1);  //0:hide, 1:according to content, 2:use custom configuration
@@ -87,19 +91,18 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		// ********************************
 		// Load needed JS libs & CSS styles
 		// ********************************
-		FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
+		JHtml::_('behavior.framework', true);
 		flexicontent_html::loadFramework('jQuery');
 		flexicontent_html::loadFramework('flexi_tmpl_common');
 		
-		//add css file
+		// Add css files to the document <head> section (also load CSS joomla template override)
 		if (!$params->get('disablecss', '')) {
-			$document->addStyleSheet($this->baseurl.'/components/com_flexicontent/assets/css/flexicontent.css');
-			$document->addCustomTag('<!--[if IE]><style type="text/css">.floattext {zoom:1;}</style><![endif]-->');
+			$document->addStyleSheetVersion($this->baseurl.'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH);
+			$document->addStyleSheetVersion($this->baseurl.'/components/com_flexicontent/assets/css/flexi_filters.css', FLEXI_VHASH);
+			//$document->addCustomTag('<!--[if IE]><style type="text/css">.floattext {zoom:1;}</style><![endif]-->');
 		}
-		
-		//allow css override
 		if (file_exists(JPATH_SITE.DS.'templates'.DS.$app->getTemplate().DS.'css'.DS.'flexicontent.css')) {
-			$document->addStyleSheet($this->baseurl.'/templates/'.$app->getTemplate().'/css/flexicontent.css');
+			$document->addStyleSheetVersion($this->baseurl.'/templates/'.$app->getTemplate().'/css/flexicontent.css', FLEXI_VHASH);
 		}
 		
 		
@@ -161,14 +164,13 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		// Use the page heading as document title, (already calculated above via 'appropriate' logic ...)
 		$doc_title = $params->get( 'page_title' );
 		
-		// Check and prepend or append site name
-		if (FLEXI_J16GE) {  // Not available in J1.5
-			// Add Site Name to page title
+		// Check and prepend or append site name to page title
+		if ( $doc_title != $app->getCfg('sitename') ) {
 			if ($app->getCfg('sitename_pagetitles', 0) == 1) {
-				$doc_title = $app->getCfg('sitename') ." - ". $doc_title ;
+				$doc_title = JText::sprintf('JPAGETITLE', $app->getCfg('sitename'), $doc_title);
 			}
 			elseif ($app->getCfg('sitename_pagetitles', 0) == 2) {
-				$doc_title = $doc_title ." - ". $app->getCfg('sitename') ;
+				$doc_title = JText::sprintf('JPAGETITLE', $doc_title, $app->getCfg('sitename'));
 			}
 		}
 		
@@ -185,13 +187,11 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		if (($_mp=$app_params->get('robots')))    $document->setMetadata('robots', $_mp);
 		
 		// Overwrite with menu META data if menu matched
-		if (FLEXI_J16GE) {
-			if ($menu_matches) {
-				if (($_mp=$menu->params->get('menu-meta_description')))  $document->setDescription( $_mp );
-				if (($_mp=$menu->params->get('menu-meta_keywords')))     $document->setMetadata('keywords', $_mp);
-				if (($_mp=$menu->params->get('robots')))                 $document->setMetadata('robots', $_mp);
-				if (($_mp=$menu->params->get('secure')))                 $document->setMetadata('secure', $_mp);
-			}
+		if ($menu_matches) {
+			if (($_mp=$menu->params->get('menu-meta_description')))  $document->setDescription( $_mp );
+			if (($_mp=$menu->params->get('menu-meta_keywords')))     $document->setMetadata('keywords', $_mp);
+			if (($_mp=$menu->params->get('robots')))                 $document->setMetadata('robots', $_mp);
+			if (($_mp=$menu->params->get('secure')))                 $document->setMetadata('secure', $_mp);
 		}
 		
 		
@@ -208,12 +208,13 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		$contenttypes = array_unique(array_map('intval', $contenttypes));  // Make sure these are integers since we will be using them UNQUOTED
 		
 		// Force hidden content type selection if only 1 content type was initially configured
-		$canseltypes = count($contenttypes)<=1 ? 0 : $canseltypes;
+		$canseltypes = count($contenttypes)==1 ? 0 : $canseltypes;
+		$params->set('canseltypes', $canseltypes);  // SET "type selection FLAG" back into parameters
 		
 		// Type data and configuration (parameters), if no content types specified then all will be retrieved
-		$types_data = flexicontent_db::getTypeData( implode(",", $contenttypes) );
+		$typeData = flexicontent_db::getTypeData( implode(",", $contenttypes) );
 		$contenttypes = array();
-		foreach($types_data as $tdata) $contenttypes[] = $tdata->id;
+		foreach($typeData as $tdata) $contenttypes[] = $tdata->id;
 		
 		// Get Content Types to use either those currently selected in the Search Form, or those hard-configured in the search menu item
 		if ( $canseltypes ) {
@@ -223,7 +224,8 @@ class FLEXIcontentViewSearch extends JViewLegacy
 			$form_contenttypes = !is_array($form_contenttypes)  ?  array($form_contenttypes)  :  $form_contenttypes;
 			$form_contenttypes = array_unique(array_map('intval', $form_contenttypes));  // Make sure these are integers since we will be using them UNQUOTED
 			
-			$contenttypes = array_intersect($contenttypes, $form_contenttypes);
+			$_contenttypes = array_intersect($contenttypes, $form_contenttypes);
+			if (!empty($_contenttypes)) $form_contenttypes = $contenttypes = $_contenttypes;  // catch empty case: no content types were given or not-allowed content types were passed
 		}
 		
 		// Check for zero content type (can occur during sanitizing content ids to integers)
@@ -232,9 +234,9 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		}
 		
 		// Type based seach, get a single content type (first one, if more than 1 were given ...)
-		if ($type_based_search && !empty($contenttypes)) {
-			$single_contenttype = reset($contenttypes);
-			$contenttypes = array($single_contenttype);
+		if ($type_based_search && $canseltypes && !empty($form_contenttypes)) {
+			$single_contenttype = reset($form_contenttypes);
+			$form_contenttypes = $contenttypes = array($single_contenttype);
 		} else {
 			$single_contenttype = false;
 		}
@@ -253,7 +255,7 @@ class FLEXIcontentViewSearch extends JViewLegacy
 			$txtflds = '';
 			if ( $show_txtfields ) {
 				if ( $show_txtfields==1 ) {
-					$txtflds = $single_contenttype ? $types_data[$single_contenttype]->params->get('searchable', '') : '';
+					$txtflds = $single_contenttype ? $typeData[$single_contenttype]->params->get('searchable', '') : '';
 				} else {
 					$txtflds = $params->get('txtflds', '');
 				}
@@ -288,7 +290,7 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		$filtflds = '';
 		if ( $show_filters ) {
 			if ( $show_filters==1 ) {
-				$filtflds = $single_contenttype ? $types_data[$single_contenttype]->params->get('filters', '') : '';
+				$filtflds = $single_contenttype ? $typeData[$single_contenttype]->params->get('filters', '') : '';
 			} else {
 				$filtflds = $params->get('filtflds', '');
 			}
@@ -327,7 +329,9 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		// If configured filters were not found/invalid for the current content type(s)
 		// then retrieve all fields marked as filterable for the give content type(s) this is useful to list per content type filters automatically, even when not set or misconfigured
 		if ( empty($filters) ) {
-			if( !empty($contenttypes) )
+			if ( $type_based_search && $canseltypes && empty($form_contenttypes))
+				$filters = array();
+			else if( !empty($contenttypes) )
 				$filters = FlexicontentFields::getSearchFields($key='id', $indexer='advanced', null, $contenttypes, $load_params=true, 0, 'filter');
 			else
 				$filters = array();
@@ -344,13 +348,13 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		{
 			$types = array();
 			if ($show_filters) $types[] = JHTML::_('select.option', '', JText::_('FLEXI_PLEASE_SELECT'));
-			foreach($types_data as $type) {
+			foreach($typeData as $type) {
 				$types[] = JHTML::_('select.option', $type->id, JText::_($type->name));
 			}
 			
-			$multiple_param = $show_filters ? ' onchange="adminFormPrepare(this.form); this.form.submit();" ' : 'multiple="true"';
-			$attribs  = $multiple_param.' size="5" class="fc_field_filter use_select2_lib fc_label_internal fc_prompt_internal"';
-			$attribs .= ' data-fc_label_text="'.flexicontent_html::escapeJsText(JText::_('FLEXI_CLICK_TO_LIST'),'s').'"';
+			$multiple_param = $show_filters ? ' onchange="adminFormPrepare(this.form); this.form.submit();" ' : ' multiple="multiple" ';
+			$attribs  = $multiple_param.' size="5" class="fc_field_filter use_select2_lib fc_prompt_internal"';  // class="... fc_label_internal" data-fc_label_text="..."
+			$attribs .= ' data-placeholder="'.flexicontent_html::escapeJsText(JText::_('FLEXI_CLICK_TO_LIST'),'s').'"';
 			$attribs .= ' data-fc_prompt_text="'.flexicontent_html::escapeJsText(JText::_('FLEXI_TYPE_TO_FILTER'),'s').'"';
 			$lists['contenttypes'] = JHTML::_('select.genericlist', $types, 'contenttypes[]', $attribs, 'value', 'text', (empty($form_contenttypes) ? '' : $form_contenttypes), 'contenttypes');
 			
@@ -368,7 +372,7 @@ class FLEXIcontentViewSearch extends JViewLegacy
 			$lists['contenttypes'] .= '   -'.JText::_('FLEXI_ALL').'-';
 			$lists['contenttypes'] .= '  </label>';
 			$lists['contenttypes'] .= ' </li>';
-			foreach($types_data as $type) {
+			foreach($typeData as $type) {
 				$checked = in_array($type->value, $form_contenttypes);
 				$checked_attr = $checked ? 'checked=checked' : '';
 				$checked_class = $checked ? ' fc_highlight' : '';
@@ -395,8 +399,8 @@ class FLEXIcontentViewSearch extends JViewLegacy
 				$form_txtflds = array(); //array('__FC_ALL__'); //array_keys($fields_text);
 			}
 			
-			$attribs  = 'multiple="true" size="5" class="fc_field_filter use_select2_lib fc_label_internal fc_prompt_internal"';
-			$attribs .= ' data-fc_label_text="'.flexicontent_html::escapeJsText(JText::_('FLEXI_CLICK_TO_LIST'),'s').'"';
+			$attribs  = ' multiple="multiple" size="5" class="fc_field_filter use_select2_lib fc_prompt_internal"';  // class="... fc_label_internal" data-fc_label_text="..."
+			$attribs .= ' data-placeholder="'.flexicontent_html::escapeJsText(JText::_('FLEXI_CLICK_TO_LIST'),'s').'"';
 			$attribs .= ' data-fc_prompt_text="'.flexicontent_html::escapeJsText(JText::_('FLEXI_TYPE_TO_FILTER'),'s').'"';
 			$lists['txtflds'] = JHTML::_('select.genericlist', $fields_text, 'txtflds[]', $attribs, 'name', 'label', $form_txtflds, 'txtflds');
 			
@@ -433,20 +437,18 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		
 		
 		// *** Selector of FLEXIcontent Results Ordering
-		if($orderby_override = $params->get('orderby_override', 1)) {
-			$lists['orderby'] = flexicontent_html::ordery_selector( $params, $form_id, $autosubmit=0 );
-		}
+		$lists['orderby'] = flexicontent_html::orderby_selector( $params, $form_id, $autosubmit=1, $extra_order_types=array(), $sfx='' );
 		
+		// *** Selector of FLEXIcontent Results Ordering (2nd level)
+		$lists['orderby_2nd'] = flexicontent_html::orderby_selector( $params, $form_id, $autosubmit=1, $extra_order_types=array(), $sfx='_2nd' );
 		
 		// *** Selector of Pagination Limit
-		if($limit_override = $params->get('limit_override', 1)) {
-			$lists['limit'] = flexicontent_html::limit_selector( $params, $form_id, $autosubmit=0 );
-		}
+		$lists['limit'] = flexicontent_html::limit_selector( $params, $form_id, $autosubmit=0 );
 		
 		
 		// *** Selector of non-FLEXIcontent Results Ordering
-		if($show_searchordering = $params->get('show_searchordering', 1)) {
-			$default_searchordering = $params->get('default_searchordering', 'newest');
+		if($show_searchordering = $params->get('show_searchordering', 1))
+		{
 			// built select lists
 			$orders = array();
 			$orders[] = JHTML::_('select.option',  'newest', JText::_( 'FLEXI_ADV_NEWEST_FIRST' ) );
@@ -454,26 +456,27 @@ class FLEXIcontentViewSearch extends JViewLegacy
 			$orders[] = JHTML::_('select.option',  'popular', JText::_( 'FLEXI_ADV_MOST_POP' ) );
 			$orders[] = JHTML::_('select.option',  'alpha', JText::_( 'FLEXI_ADV_ALPHA' ) );
 			$orders[] = JHTML::_('select.option',  'category', JText::_( 'FLEXI_ADV_SEARCH_SEC_CAT' ) );
-			$lists['ordering'] = JHTML::_('select.genericlist', $orders, 'ordering',
-				'class="fc_field_filter use_select2_lib"', 'value', 'text', $state->get('ordering', $default_searchordering) );
+			$lists['ordering'] = JHTML::_('select.genericlist', $orders, 'o',
+				'class="fc_field_filter use_select2_lib"', 'value', 'text', $searchordering, 'ordering' );
 		}		
 		
 		
 		// *** Selector for usage of Search Text
-		if($show_searchphrase = $params->get('show_searchphrase', 1)) {
-			$default_searchphrase = $params->get('default_searchphrase', 'all');
-			$searchphrase = JRequest::getVar('searchphrase', $default_searchphrase);
-			$searchphrase_names = array('natural'=>'FLEXI_NATURAL_PHRASE', 'natural_expanded'=>'FLEXI_NATURAL_PHRASE_GUESS_RELEVANT', 
-				'all'=>'FLEXI_ALL_WORDS', 'any'=>'FLEXI_ANY_WORDS', 'exact'=>'FLEXI_EXACT_PHRASE');
+		if($show_searchphrase = $params->get('show_searchphrase', 1))
+		{
+			$searchphrase_names = array(
+				'all'=>'FLEXI_ALL_WORDS', 'any'=>'FLEXI_ANY_WORDS', 'natural'=>'FLEXI_NATURAL_PHRASE',
+				'exact'=>'FLEXI_EXACT_PHRASE', 'natural_expanded'=>'FLEXI_NATURAL_PHRASE_GUESS_RELEVANT'
+			);
 
-			$searchphrases = array();
+			$phrases = array();
 			foreach ($searchphrase_names as $searchphrase_value => $searchphrase_name) {
 				$_obj = new stdClass();
 				$_obj->value = $searchphrase_value;
 				$_obj->text  = $searchphrase_name;
-				$searchphrases[] = $_obj;
+				$phrases[] = $_obj;
 			}
-			$lists['searchphrase'] = JHTML::_('select.genericlist', $searchphrases, 'searchphrase',
+			$lists['searchphrase'] = JHTML::_('select.genericlist', $phrases, 'p',
 				'class="fc_field_filter use_select2_lib"', 'value', 'text', $searchphrase, 'searchphrase', $_translate=true);
 			
 			/*$lists['searchphrase']  = '<ul class="fc_field_filter fc_checkradio_group">';
@@ -482,7 +485,7 @@ class FLEXIcontentViewSearch extends JViewLegacy
 				$checked = $searchphrase_value == $searchphrase;
 				$checked_attr = $checked ? 'checked=checked' : '';
 				$checked_class = $checked ? 'fc_highlight' : '';
-				$lists['searchphrase'] .= '  <input href="javascript:;" onclick="fc_toggleClassGrp(this.parentNode, \'fc_highlight\');" id="searchphrase_'.$searchphrase_value.'" type="radio" name="searchphrase" value="'.$searchphrase_value.'" '.$checked_attr.' />';
+				$lists['searchphrase'] .= '  <input href="javascript:;" onclick="fc_toggleClassGrp(this.parentNode, \'fc_highlight\');" id="searchphrase_'.$searchphrase_value.'" type="radio" name="p" value="'.$searchphrase_value.'" '.$checked_attr.' />';
 				$lists['searchphrase'] .= '  <label class="'.$checked_class.'" style="display:inline-block; white-space:nowrap;" for="searchphrase_'.$searchphrase_value.'">';
 				$lists['searchphrase'] .=     JText::_($searchphrase_name);
 				$lists['searchphrase'] .= '  </label>';
@@ -524,8 +527,8 @@ class FLEXIcontentViewSearch extends JViewLegacy
 				$_area->value = $area;
 				$options[] = $_area;
 			}
-			$attribs  = 'multiple="true" size="5" class="fc_field_filter use_select2_lib fc_label_internal fc_prompt_internal"';
-			$attribs .= ' data-fc_label_text="'.flexicontent_html::escapeJsText(JText::_('FLEXI_CLICK_TO_LIST'),'s').'"';
+			$attribs  = ' multiple="multiple" size="5" class="fc_field_filter use_select2_lib fc_prompt_internal"';  // class="... fc_label_internal" data-fc_label_text="..."
+			$attribs .= ' data-placeholder="'.flexicontent_html::escapeJsText(JText::_('FLEXI_CLICK_TO_LIST'),'s').'"';
 			$attribs .= ' data-fc_prompt_text="'.flexicontent_html::escapeJsText(JText::_('FLEXI_TYPE_TO_FILTER'),'s').'"';
 			$lists['areas'] = JHTML::_('select.genericlist', $options, 'areas[]', $attribs, 'value', 'text', $form_areas, 'areas', $do_jtext=true);
 			/*
@@ -581,21 +584,55 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		$state->set('keyword', $searchword);
 		$filter_word_like_any = $params->get('filter_word_like_any', 0);
 		
-		if(!$error)
+		if ($error) {
+			$results	= array();
+			$total		= 0;
+			$pageNav = '';
+		}
+		else
 		{
+			require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'helpers'.DS.'route.php');
+			
 			$results	= $this->get('data' );
 			$total		= $this->get('total');
 			$pageNav  = $this->get('pagination');
-
-			//require_once (JPATH_SITE.DS.'components'.DS.'com_content'.DS.'helpers'.DS.'route.php');
-			require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'helpers'.DS.'route.php');
-
+			
+			// URL-encode filter values
+			$_revert = array('%21'=>'!', '%2A'=>'*', '%27'=>"'", '%28'=>'(', '%29'=>')');
+			foreach($_GET as $i => $v) {
+				if (substr($i, 0, 6) === "filter") {
+					if (is_array($v)) {
+						foreach($v as $ii => &$vv) {
+							$vv = str_replace('&', '__amp__', $vv);
+							$vv = strtr(rawurlencode($vv), $_revert);
+							$pageNav->setAdditionalUrlParam($i.'['.$ii.']', $vv);
+						}
+						unset($vv);
+					} else {
+						$v = str_replace('&', '__amp__', $v);
+						$v = strtr(rawurlencode($v), $_revert);
+						$pageNav->setAdditionalUrlParam($i, $v);
+					}
+				}
+			}
+			
+			$_sh404sef = defined('SH404SEF_IS_RUNNING') && JFactory::getConfig()->get('sef');
+			if ($_sh404sef) $pageNav->setAdditionalUrlParam('limit', $model->getState('limit'));
+			
 			if ($state->get('match') == 'exact') {
 				$searchwords = array($searchword);
 				//$needle = $searchword;
 			} else {
 				$searchwords = preg_split("/\s+/u", $searchword);
 				//print_r($searchwords);
+			}
+			
+			// Create regular expressions, for highlighting the matched words
+			$w_regexp_highlight = array();
+			foreach($searchwords as $n => $_word) {
+				$w_regexp_highlight[$_word] = StringHelper::strlen($_word) <= 2  ||  $n+1 < count($searchwords) ?
+					'#\b('. preg_quote($_word, '#') .')\b#iu' :   // Non-last word or word too small avoid highlighting non exact matches
+					'#\b('. preg_quote($_word, '#') .')#iu' ;
 			}
 			
 			for ($i=0; $i < count($results); $i++)
@@ -607,21 +644,26 @@ class FLEXIcontentViewSearch extends JViewLegacy
 					//if( count($parts)>1 ) { echo "<pre>"; print_r($parts); exit;}
 					foreach ($parts as $word_found => $part) {
 						if (!$word_found) continue;
-						$searchRegex = '#('. preg_quote($word_found, '#') .')#iu';
-						$parts[$word_found] = preg_replace($searchRegex, '<span class="highlight">\0</span>', $part );
+						$searchRegex = $w_regexp_highlight[$word_found];
+						$parts[$word_found] = preg_replace($searchRegex, '_fc_highlight_start_\0_fc_highlight_end_', $part );
 					}
-					$result->text = implode($parts, " <br/> ");
+					$result->text = implode(' <br/> ', $parts);
 					
 					$replace_count_total = 0;
 					
 					// This is for LIKE %word% search for languages without spaces
-					if ($filter_word_like_any == 0) {
+					if ($filter_word_like_any)
+					{
+						if (strlen($word_found)<=2) continue; // Do not highlight too small words, since we do not consider spaces
 						foreach ($searchwords as $_word) {
 							$searchRegex = '#('. preg_quote($_word, '#') .'[^\s]*)#iu';
-							$result->text = preg_replace($searchRegex, '<span class="highlight">\0</span>', $result->text, 1, $replace_count );
+							$result->text = preg_replace($searchRegex, '_fc_highlight_start_\0_fc_highlight_end_', $result->text, 1, $replace_count );
 							if ($replace_count) $replace_count_total++;
 						}
 					}
+					
+					$result->text = str_replace('_fc_highlight_start_', '<span class="highlight">', $result->text );
+					$result->text = str_replace('_fc_highlight_end_', '</span>', $result->text );
 					
 					// Add some message about matches
 					/*if ( $state->get('match')=='any' ) {
@@ -638,7 +680,7 @@ class FLEXIcontentViewSearch extends JViewLegacy
 					$result->text = $text_search_header . $result->text;*/
 				} else {
 					$parts = FLEXIadvsearchHelper::prepareSearchContent( $result->text, $params->get('text_chars', 200), array() );
-					$result->text = implode($parts, " <br/> ");
+					$result->text = implode(' <br/> ', $parts);
 				}
 				
 				/*if ( !empty($result->fields_text) ) {
@@ -661,10 +703,17 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		// ******************************************************************
 		// Create HTML of filters (-AFTER- getData of model have been called)
 		// ******************************************************************
+		$filter_values = array();
 		foreach ($filters as $filter)
 		{
 			$filter->parameters->set('display_label_filter_s', 0);
 			$filter->value = JRequest::getVar('filter_'.$filter->id, false);
+			
+			if ( (!is_array($filter->value) && strlen($filter->value)) || (is_array($filter->value) && count($filter->value)) )
+			{
+				$filter_values[$filter->id] = $filter->value;
+			}
+			
 			//$fieldsearch = $app->getUserStateFromRequest( 'flexicontent.search.'.'filter_'.$filter->id, 'filter_'.$filter->id, array(), 'array' );
 			//echo "Field name: ".$filter->name; echo ":: ". 'filter_'.$filter->id ." :: value: "; print_r($filter->value); echo "<br/>\n";
 			
@@ -676,23 +725,27 @@ class FLEXIcontentViewSearch extends JViewLegacy
 		// Create links
 		$link = JRoute::_(FlexicontentHelperRoute::getSearchRoute(0, $menu_matches ? $menu->id : 0));
 		
-		//$print_link = JRoute::_('index.php?view=search&pop=1&tmpl=component&print=1');
-    $curr_url = $_SERVER['REQUEST_URI'];
+    $curr_url   = str_replace('&', '&amp;', $_SERVER['REQUEST_URI']);
     $print_link = $curr_url .(strstr($curr_url, '?') ? '&amp;'  : '?').'pop=1&amp;tmpl=component&amp;print=1';
 		
 		$pageclass_sfx = htmlspecialchars($params->get('pageclass_sfx'));
 		
 		$this->assignRef('action',    $link);  // $uri->toString()
 		$this->assignRef('print_link',$print_link);
+		
+		$this->assignRef('type_based_search', $type_based_search);
 		$this->assignRef('contenttypes', $contenttypes);
 		$this->assignRef('filters',   $filters);
+		
 		$this->assignRef('results',   $results);
 		$this->assignRef('lists',     $lists);
 		$this->assignRef('params',    $params);
 		$this->assignRef('pageNav',   $pageNav);
 		$this->assignRef('pageclass_sfx', $pageclass_sfx);
+		$this->assignRef('typeData',	$typeData);
 
 		$this->assign('ordering',     $state->get('ordering'));
+		$this->assign('filter_values', $filter_values);
 		$this->assign('searchword',   $searchword);
 		$this->assign('searchphrase', $state->get('match'));
 		$this->assign('searchareas',  $areas);

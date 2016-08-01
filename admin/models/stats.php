@@ -19,7 +19,7 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.model');
+jimport('legacy.model.legacy');
 
 /**
  * FLEXIcontent Component stats Model
@@ -58,7 +58,6 @@ class FlexicontentModelStats extends JModelLegacy
 	{
 		$_items = array();
 		
-		
 		// Get total nr of items
 		$query = 'SELECT count(i.id)'
 			. ' FROM #__content as i'
@@ -88,8 +87,57 @@ class FlexicontentModelStats extends JModelLegacy
 		$query = 'SELECT count(id) FROM #__flexicontent_files';
 		$this->_db->SetQuery($query);
 		$_items[] = $this->_db->loadResult();
+
+		// Get nr of type
+		$query = 'SELECT count(id) FROM #__flexicontent_types';
+		$this->_db->SetQuery($query);
+		$_items[] = $this->_db->loadResult();
+
+		// Get nr of authors
+		$query = 'SELECT COUNT(id) FROM #__users';
+		$this->_db->SetQuery($query);
+		$_items[] = $this->_db->loadResult();
 		
+
+		// Get nr of templates
+		$query = 'SELECT count(DISTINCT template) FROM #__flexicontent_templates';
+		$this->_db->SetQuery($query);
+		$_items[] = $this->_db->loadResult();
+
+		// Get nr of fields
+		$query = 'SELECT count(id) FROM #__flexicontent_fields';
+		$this->_db->SetQuery($query);
+		$_items[] = $this->_db->loadResult();
 		
+		return $_items;
+	}
+	
+	
+	/**
+	* Method to get items counts per month
+	*
+	* @access public
+	* @return array
+	*/
+	function getItemsgraph(){
+		$_items = array();
+
+		// Get total nr of items
+		$query = 'SELECT
+				  COUNT(*) AS item_count,
+				  DATE_FORMAT(i.created, "%Y-%m") as year_month_num,
+				  DATE_FORMAT(i.created, "%Y-%b") as year_month_text,
+				  DATE_FORMAT(i.created, "%m") as month_num,
+				  DATE_FORMAT(i.created, "%b") as month_txt
+
+				FROM #__content AS i
+				WHERE i.created > DATE_SUB(NOW(), INTERVAL 120 MONTH)
+				GROUP BY DATE_FORMAT(i.created, "%Y-%m")
+
+				';	
+		$this->_db->SetQuery($query);
+		$_items[] = $this->_db->loadObjectList();
+
 		return $_items;
 	}
 
@@ -109,6 +157,30 @@ class FlexicontentModelStats extends JModelLegacy
 			. ' LEFT JOIN #__content_rating AS cr ON cr.content_id = i.id'
 			. ' WHERE c.extension="'.FLEXI_CAT_EXTENSION.'" AND c.lft >= ' . $this->_db->Quote(FLEXI_LFT_CATEGORY) . ' AND c.rgt<=' . $this->_db->Quote(FLEXI_RGT_CATEGORY)
 			. ' ORDER BY i.hits DESC'
+			. ' LIMIT 5'
+			;
+
+		$this->_db->SetQuery($query);
+		$hits = $this->_db->loadObjectList();
+
+		return $hits;
+	}
+
+	/**
+	 * Method to get popular data
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getUnpopular()
+	{
+		$_df = 100 / $this->_rating_resolution;
+		$query = 'SELECT (cr.rating_sum / cr.rating_count ) * '.$_df.' AS votes, i.title, i.id, i.hits'
+			. ' FROM #__content AS i'
+			. ' JOIN #__categories as c ON i.catid=c.id'
+			. ' LEFT JOIN #__content_rating AS cr ON cr.content_id = i.id'
+			. ' WHERE c.extension="'.FLEXI_CAT_EXTENSION.'" AND c.lft >= ' . $this->_db->Quote(FLEXI_LFT_CATEGORY) . ' AND c.rgt<=' . $this->_db->Quote(FLEXI_RGT_CATEGORY)
+			. ' ORDER BY i.hits ASC'
 			. ' LIMIT 5'
 			;
 
@@ -425,6 +497,124 @@ class FlexicontentModelStats extends JModelLegacy
 		$rating_resolution = $rating_resolution >= 5   ?  $rating_resolution  :  5;
 		$rating_resolution = $rating_resolution <= 100  ?  $rating_resolution  :  100;
 		$this->_rating_resolution = $rating_resolution;
+	}
+
+	/**
+	 * Method to get item count of published items
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getItemspublish()
+	{
+		$query = 'SELECT COUNT(*) AS itemspub '
+			. ' FROM #__content AS i'
+			. ' WHERE i.state = 1'
+			;
+
+		$this->_db->SetQuery($query);
+		$itemspub = $this->_db->loadObjectList();
+
+		return $itemspub;
+	}
+
+	/**
+	 * Method to get item count of unpublished items
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getItemsunpublish()
+	{
+		$query = 'SELECT COUNT(*) AS itemsunpub '
+			. ' FROM #__content AS i'
+			. ' JOIN #__categories as c ON i.catid = c.id'
+			. ' WHERE i.state = 0'
+			;
+
+		$this->_db->SetQuery($query);
+		$itemsunpub = $this->_db->loadObjectList();
+
+		return $itemsunpub;
+	}
+	/**
+	 * Method to get item count of items waiting approval
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getItemswaiting()
+	{
+		$query = 'SELECT COUNT(*) AS itemswaiting '
+			. ' FROM #__content AS i'
+			. ' JOIN #__categories as c ON i.catid = c.id'
+			. ' WHERE i.state = -3'
+			;
+
+		$this->_db->SetQuery($query);
+		$itemswaiting = $this->_db->loadObjectList();
+
+		return $itemswaiting;
+	}
+
+	/**
+	 * Method to get item count of items in progress
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getItemsprogress()
+	{
+		$query = 'SELECT COUNT(*) AS itemsprogress '
+			. ' FROM #__content AS i'
+			. ' JOIN #__categories as c ON i.catid = c.id'
+			. ' WHERE i.state = -5'
+			;
+
+		$this->_db->SetQuery($query);
+		$itemsprogress = $this->_db->loadObjectList();
+
+		return $itemsprogress;
+	}
+
+	/**
+	 * Method to get item count of items without Meta-Description
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getItemsmetadescription()
+	{
+		$query = 'SELECT COUNT(*) AS itemsmetadesc '
+			. ' FROM #__content AS i'
+			. ' JOIN #__categories as c ON i.catid = c.id'
+			. ' WHERE i.metadesc = ""'
+			;
+
+		$this->_db->SetQuery($query);
+		$itemsmetadesc = $this->_db->loadObjectList();
+
+		return $itemsmetadesc;
+	}
+
+	/**
+	 * Method to get without Meta Keywords
+	 *
+	 * @access public
+	 * @return array
+	 */
+	function getItemsmetakeywords()
+	{
+		$query = 'SELECT COUNT(i.state) AS itemsmetakey '
+			. ' FROM #__content AS i'
+			. ' JOIN #__categories as c ON i.catid = c.id'
+			. ' WHERE i.metakey = ""'
+			;
+
+		$this->_db->SetQuery($query);
+		$itemsmetakey = $this->_db->loadObjectList();
+
+		return $itemsmetakey;
 	}
 
 }

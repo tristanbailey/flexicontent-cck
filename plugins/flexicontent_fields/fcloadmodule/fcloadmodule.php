@@ -14,8 +14,7 @@
  */
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-//jimport('joomla.plugin.plugin');
-jimport('joomla.event.plugin');
+jimport('cms.plugin.plugin');
 
 class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 {
@@ -25,7 +24,7 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 	// CONSTRUCTOR
 	// ***********
 	
-	function plgFlexicontent_fieldsFcloadmodule( &$subject, $params )
+	function __construct( &$subject, $params )
 	{
 		parent::__construct( $subject, $params );
 		JPlugin::loadLanguage('plg_flexicontent_fields_fcloadmodule', JPATH_ADMINISTRATOR);
@@ -40,7 +39,6 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 	// Method to create field's HTML display for item form
 	function onDisplayField(&$field, &$item)
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		$field->label = JText::_($field->label);
@@ -81,14 +79,14 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 	// Method to create field's HTML display for frontend views
 	function onDisplayFieldValue(&$field, $item, $values=null, $prop='display')
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		global $addthis;
 		$mainframe = JFactory::getApplication();
 		
 		$values = $values ? $values : $field->value;
-		if ( empty($values[0]) ) {
+		if ( empty($values[0]) )
+		{
 			$values[0] = '';
 		}
 		
@@ -100,7 +98,7 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 		$style 			= $field->parameters->get('style', -2);
 		
 		$document		= JFactory::getDocument();
-		$display 		= '';
+		$display 		= array();
 		$renderer		= $document->loadRenderer('module');
 		$mparams		= array('style'=>$style);
 		
@@ -148,7 +146,7 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 				list($param_label, $param_name) = preg_split("/[\s]*!![\s]*/", $mod_param);
 				$custom_mod_params[ $param_name ] = $value[$param_name];
 			}
-			$_mod_params = FLEXI_J16GE ? new JRegistry($mod->params) : new JParameter($mod->params);
+			$_mod_params = new JRegistry($mod->params);
 			foreach ($custom_mod_params as $i => $v) $_mod_params->set($i,$v);
 			$mod->params = $_mod_params ->toString();
 			
@@ -156,7 +154,7 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 			// ************************
 			// Render the module's HTML
 			// ************************
-			$display = $renderer->render($mod, $mparams);
+			$display[] = $renderer->render($mod, $mparams);
 		}
 		
 		
@@ -165,12 +163,14 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 		// ************************************
 		else {
 			if (!$position) { $field->{$prop} = 'Error'; return; }
-			foreach (JModuleHelper::getModules($position) as $mod)  {
-				$display .= $renderer->render($mod, $mparams);
+			foreach (JModuleHelper::getModules($position) as $mod)
+			{
+				$display[] = $renderer->render($mod, $mparams);
 			}
 		}
-		
-		$field->{$prop} = $display;
+
+		$display = trim( implode('', $display) );
+		$field->{$prop} = strlen( $display ) ? $display : null;
 	}
 	
 	
@@ -182,7 +182,6 @@ class plgFlexicontent_fieldsFcloadmodule extends JPlugin
 	// Method to handle field's values before they are saved into the DB
 	function onBeforeSaveField( &$field, &$post, &$file, &$item )
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		if(!is_array($post) && !strlen($post)) return;
 		

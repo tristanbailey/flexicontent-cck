@@ -19,7 +19,7 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.model');
+jimport('legacy.model.legacy');
 
 /**
  * FLEXIcontent Component Model
@@ -74,42 +74,61 @@ class FLEXIcontentModelSearch extends JModelLegacy
 	{
 		parent::__construct();
 		
+		// **************************
 		// Set id and load parameters
+		// **************************
 		$id = 0;  // no id used by this view
 		$this->setId((int)$id);
 		$params = & $this->_params;
 		
-		// Set the pagination variables into state (We get them from http request OR use default tags view parameters)
-		$limit = JRequest::getVar('limit') ? JRequest::getVar('limit') : $params->get('limit');
-		$limitstart = JRequest::getInt('limitstart');
-
+		
+		// Set the pagination variables into state (We get them from http request OR use default search view parameters)
+		$limit = strlen(JRequest::getVar('limit')) ? JRequest::getInt('limit') : $this->_params->get('limit');
+		$limitstart	= JRequest::getInt('limitstart', JRequest::getInt('start', 0, '', 'int'), '', 'int');
+		JRequest::setVar('limitstart', $limitstart);  // Make sure it is limitstart is set
+		JFactory::getApplication()->input->set('limitstart', $limitstart);
+		
 		$this->setState('limit', $limit);
 		$this->setState('limitstart', $limitstart);
 		
-		$default_searchphrase = $params->get('default_searchphrase', 'all');
 		
+		// *************************
 		// Set the search parameters
-		$keyword		= urldecode(JRequest::getString('searchword'));
-		$match			= JRequest::getWord('searchphrase', $default_searchphrase);
-		$ordering		= JRequest::getWord('ordering', 'newest');
+		// *************************
+		$keyword  = urldecode( JRequest::getString('searchword', JRequest::getString('q')) );
+		
+		$default_searchphrase = $params->get('default_searchphrase', 'all');
+		$match = JRequest::getWord('searchphrase', JRequest::getWord('p', $default_searchphrase));
+		
+		$default_searchordering = $params->get('default_searchordering', 'newest');
+		$ordering = JRequest::getWord('ordering', JRequest::getWord('o', $default_searchordering));
+		
 		$this->setSearch($keyword, $match, $ordering);
-
-		//Set the search areas
+		
+		
+		// ********************
+		// Set the search areas
+		// ********************
 		$areas = JRequest::getVar('areas');
 		$this->setAreas($areas);
 		
+		
+		// ******************************
 		// Get minimum word search length
+		// ******************************
 		$app = JFactory::getApplication();
 		$option = JRequest::getVar('option');
-		if ( !$app->getUserState( $option.'.min_word_len', 0 ) ) {
+		
+		//if ( !$app->getUserState( $option.'.min_word_len', 0 ) ) {  // Do not cache to allow configuration changes
 			$db = JFactory::getDBO();
 			$db->setQuery("SHOW VARIABLES LIKE '%ft_min_word_len%'");
 			$_dbvariable = $db->loadObject();
 			$min_word_len = (int) @ $_dbvariable->Value;
 			$minchars = $params->get('minchars', 3);
-			$min_word_len = $min_word_len > $minchars  ?  $min_word_len : $minchars;
+			$search_prefix = JComponentHelper::getParams( 'com_flexicontent' )->get('add_search_prefix') ? 'vvv' : '';   // SEARCH WORD Prefix
+			$min_word_len = !$search_prefix && $min_word_len > $minchars  ?  $min_word_len : $minchars;
 			$app->setUserState($option.'.min_word_len', $min_word_len);
-		}
+		//}
 	}
 	
 	
@@ -177,15 +196,18 @@ class FLEXIcontentModelSearch extends JModelLegacy
 		// Lets load the content if it doesn't already exist
 		if (empty($this->_data))
 		{
+			// Trigger search event to get the content items
 			$areas = $this->getAreas();
 
 			JPluginHelper::importPlugin( 'search');
 			$dispatcher = JDispatcher::getInstance();
-			$results = $dispatcher->trigger( FLEXI_J16GE ? 'onContentSearch' : 'onSearch', array(
-				$this->getState('keyword'),
-				$this->getState('match'),
-				$this->getState('ordering'),
-				$areas['active'])
+			$results = $dispatcher->trigger( 'onContentSearch',
+				array(
+					$this->getState('keyword'),
+					$this->getState('match'),
+					$this->getState('ordering'),
+					(!empty($areas['active']) ? $areas['active'] : array_keys($areas['search']))
+				)
 			);
 
 			$rows = array();
@@ -223,10 +245,12 @@ class FLEXIcontentModelSearch extends JModelLegacy
 	 * @access	public
 	 * @return	object
 	 */
-	public function getPagination() {
+	public function getPagination()
+	{
 		// Load the content if it doesn't already exist
-		if (empty($this->_pagination)) {
-			//jimport('joomla.html.pagination');
+		if (empty($this->_pagination))
+		{
+			//jimport('cms.pagination.pagination');
 			require_once (JPATH_COMPONENT.DS.'helpers'.DS.'pagination.php');
 			$this->_pagination = new FCPagination($this->getTotal(), $this->getState('limitstart'), $this->getState('limit') );
 		}
@@ -249,14 +273,14 @@ class FLEXIcontentModelSearch extends JModelLegacy
 		// Return (only) the area of advanced search plugin, when search areas selector is not shown
 		$params = & $this->_params;
 		if( !$params->get('show_searchareas', 0) ) {
-			$this->_areas['search'] = array('flexicontent');
+			$this->_areas['search'] = array('flexicontent' => 'FLEXICONTENT');
 			return $this->_areas;
 		}
 		
 		// Using other search areas, get all search
 		JPluginHelper::importPlugin( 'search');
 		$dispatcher = JDispatcher::getInstance();
-		$searchareas = $dispatcher->trigger( FLEXI_J16GE ? 'onContentSearchAreas' : 'onSearchAreas' );
+		$searchareas = $dispatcher->trigger( 'onContentSearchAreas' );
 		$areas = array();
 		foreach ($searchareas as $area) {
 			$areas = array_merge( $areas, $area );
@@ -294,12 +318,15 @@ class FLEXIcontentModelSearch extends JModelLegacy
 		$app  = JFactory::getApplication();
 		$menu = $app->getMenu()->getActive();     // Retrieve active menu
 		
-		// Get the COMPONENT only parameters, then merge the menu parameters
-		$comp_params = JComponentHelper::getComponent('com_flexicontent')->params;
-		$params = FLEXI_J16GE ? clone ($comp_params) : new JParameter( $comp_params ); // clone( JComponentHelper::getParams('com_flexicontent') );
-		if ($menu) {
-			$menu_params = FLEXI_J16GE ? $menu->params : new JParameter($menu->params);
-			$params->merge($menu_params);
+		// Get the COMPONENT only parameter
+		$params  = new JRegistry();
+		$cparams = JComponentHelper::getParams('com_flexicontent');
+		$params->merge($cparams);
+		
+		// Merge the active menu parameters
+		if ($menu)
+		{
+			$params->merge($menu->params);
 		}
 		
 		$this->_params = $params;

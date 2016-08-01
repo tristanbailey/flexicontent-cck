@@ -17,6 +17,8 @@
  */
 
 defined('_JEXEC') or die('Restricted access');
+
+$tooltip_class = FLEXI_J30GE ? ' hasTooltip' : ' hasTip';
 ?>
 <style type="text/css">
 table#itemcompare u{
@@ -35,33 +37,35 @@ table#itemcompare s{
 					<?php endif; ?>
 					<table class="admintable">
 						<tr>
-							<th align="right" width="16%" style="font-size:16px;">
+							<th align="right" width="" style="font-size:16px;">
 							</th>
-							<th align="left" width="42%" style="font-size:16px;">
+							<th align="left" width="" style="font-size:16px;">
 								<?php echo JText::_( 'FLEXI_VERSION_NR' ) . $this->rev; ?>
 							</th>
-							<th align="left" width="42%" style="font-size:16px;">
+							<th align="left" width="" style="font-size:16px;">
 								<?php echo JText::_( 'FLEXI_CURRENT_VERSION' ); ?>
 							</th>
 						</tr>
 						<?php
 						foreach ($this->fields as $field)
 						{
-							// used to hide the core fields from this listing
-							if ( $field->iscore == 0 || ($field->field_type == 'maintext' && (!$this->tparams->get('hide_maintext'))) ) {
-							// set the specific label for the maintext field
-								if ($field->field_type == 'maintext') {
-									$field->label 			= JText::_($this->tparams->get('maintext_label', $field->label));
-									$field->description 	= $this->tparams->get('maintext_desc', $field->description);
-									$field->display			= $field->value ? flexicontent_html::nl2space($field->value[0]) : JText::_( 'FLEXI_NO_VALUE' );									
-									$field->displayversion	= $field->version ? flexicontent_html::nl2space($field->version[0]) : JText::_( 'FLEXI_NO_VALUE' );
-								}
-								$noplugin = '<div class="fc-mssg fc-warning">'. JText::_( 'FLEXI_PLEASE_PUBLISH_PLUGIN' ) .'</div>';
-								$html = flexicontent_html::flexiHtmlDiff($field->displayversion, $field->display, $this->codemode);
+							if ( $field->iscore == 0 || ($field->field_type == 'maintext' && (!$this->tparams->get('hide_maintext'))) /*|| in_array($field->field_type, array('tags', 'categories'))*/ )
+							{
+								//$field->display = $field->value ? flexicontent_html::nl2space($field->value[0]) : JText::_( 'FLEXI_NO_VALUE' );
+								//$field->displayversion = $field->version ? flexicontent_html::nl2space($field->version[0]) : JText::_( 'FLEXI_NO_VALUE' );
+								
+								$noplugin = '<div class="fc-mssg-inline fc-warning" style="margin:0 4px 6px 4px; max-width: unset;">'.JText::_( 'FLEXI_PLEASE_PUBLISH_THIS_PLUGIN' ).'</div>';
+								
+								//echo "Calculating DIFF for: " $field->label."<br/>";
+								$html = flexicontent_html::flexiHtmlDiff(
+									!is_array($field->displayversion) ? $field->displayversion : implode('', $field->displayversion),
+									!is_array($field->display) ? $field->display : implode('', $field->display),
+									$this->codemode
+								);
 						?>
 						<tr>
-							<td class="key">
-								<label for="<?php echo $field->name; ?>" class="hasTip" title="<?php echo $field->label; ?>::<?php echo $field->description; ?>">
+							<td class="key" style="text-align:right;'">
+								<label for="<?php echo $field->name; ?>" class="label <?php echo $tooltip_class; ?>" title="<?php echo flexicontent_html::getToolTip($field->label, $field->description, 0); ?>">
 									<?php echo JText::_($field->label); ?>
 								</label>
 							</td>

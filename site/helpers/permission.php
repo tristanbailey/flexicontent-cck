@@ -25,8 +25,8 @@ class FlexicontentHelperPerm
 		
 		$user_id = JFactory::getUser()->id;
 		
-		// Return cached data, for J2.5 or J1.5 without FLEXIaccess
-		if ((FLEXI_J16GE || !FLEXI_ACCESS) && FLEXI_CACHE) {
+		// Return cached data
+		if ( FLEXI_CACHE ) {
 			$catscache = JFactory::getCache('com_flexicontent_cats');  // Get Joomla Cache of '...items' Caching Group
 			$catscache->setCaching(1); 		              // Force cache ON
 			$catscache->setLifeTime(FLEXI_CACHE_TIME);  // Set expire time (default is 1 hour)
@@ -35,7 +35,7 @@ class FlexicontentHelperPerm
 		}
 		
 		else {
-			// Caching disabled or ... FLEXI_ACCESS installed
+			// Caching disabled
 			$permission = FlexicontentHelperPerm::getUserPerms($user_id);
 		}
 		
@@ -48,7 +48,7 @@ class FlexicontentHelperPerm
 	{
 		// handle jcomments integration
 		if (JPluginHelper::isEnabled('system', 'jcomments')) {
-			$Comments_Enabled 	= 1;
+			$JComments_Installed 	= 1;
 			$destpath		= JPATH_SITE.DS.'components'.DS.'com_jcomments'.DS.'plugins';
 			$dest 			= $destpath.DS.'com_flexicontent.plugin.php';
 			$source 		= JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'librairies'.DS.'jcomments'.DS.'com_flexicontent.plugin.php';
@@ -67,11 +67,12 @@ class FlexicontentHelperPerm
 				}
 			}
 		} else {
-			$Comments_Enabled 	= 0;
+			$JComments_Installed 	= 0;
 		}
 		
 		// Find permissions for given user id
 		$user = $user_id ? JFactory::getUser($user_id) : JFactory::getUser();  // no user id given, use current user)
+		$user_id = $user->id;
 		$permission = new stdClass;
 		
 		// !!! This is the Super User Privelege of GLOBAL Configuration		(==> (for J2.5) core.admin ACTION allowed on ROOT ASSET: 'root.1')
@@ -89,49 +90,16 @@ class FlexicontentHelperPerm
 		// ITEMS/CATEGORIES: category-inherited permissions, (NOTE: these are the global settings, so:)
 		// *** 1. the action permissions of individual items are checked seperately per item
 		// *** 2. the view permission is checked via the access level of each item
-		// --- *. We will check for SOFT DENY, and then try to find the FIRST ALLOWED CATEGORY FOR EACH ACTION
+		// --- *. We will not check the category tree even if SOFT DENY (null)
+		// --- *. instead the code that need this can call FlexicontentHelperPerm::getPermAny(...)
 		
-		$permission->CanAdd     = $user->authorise('core.create', 				'com_flexicontent');
-		if ($permission->CanAdd === NULL) {
-			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.create'), $require_all=true, $check_published = true, false, $find_first = true );
-			$permission->CanAdd = count($allowedcats) > 0;
-		}
-		
-		$permission->CanEdit    = $user->authorise('core.edit', 					'com_flexicontent');
-		if ($permission->CanEdit === NULL) {
-			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.edit'), $require_all=true, $check_published = true, false, $find_first = true );
-			$permission->CanEdit = count($allowedcats) > 0;
-		}
-		
-		$permission->CanEditOwn = $user->authorise('core.edit.own', 			'com_flexicontent');
-		if ($permission->CanEditOwn === NULL) {
-			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.edit.own'), $require_all=true, $check_published = true, false, $find_first = true );
-			$permission->CanEditOwn = count($allowedcats) > 0;
-		}
-		
-		$permission->CanPublish = $user->authorise('core.edit.state',			'com_flexicontent');
-		if ($permission->CanPublish === NULL) {
-			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.edit.state'), $require_all=true, $check_published = true, false, $find_first = true );
-			$permission->CanPublish = count($allowedcats) > 0;
-		}
-		
+		$permission->CanAdd       = $user->authorise('core.create', 				'com_flexicontent');
+		$permission->CanEdit      = $user->authorise('core.edit', 					'com_flexicontent');
+		$permission->CanEditOwn   = $user->authorise('core.edit.own', 			'com_flexicontent');
+		$permission->CanPublish   = $user->authorise('core.edit.state',			'com_flexicontent');
 		$permission->CanPublishOwn= $user->authorise('core.edit.state.own',	'com_flexicontent');
-		if ($permission->CanPublishOwn === NULL) {
-			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.edit.state.own'), $require_all=true, $check_published = true, false, $find_first = true );
-			$permission->CanPublishOwn = count($allowedcats) > 0;
-		}
-		
 		$permission->CanDelete		= $user->authorise('core.delete', 				'com_flexicontent');
-		if ($permission->CanDelete === NULL) {
-			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.delete'), $require_all=true, $check_published = true, false, $find_first = true );
-			$permission->CanDelete = count($allowedcats) > 0;
-		}
-		
 		$permission->CanDeleteOwn	= $user->authorise('core.delete.own', 		'com_flexicontent');
-		if ($permission->CanDeleteOwn === NULL) {
-			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.delete.own'), $require_all=true, $check_published = true, false, $find_first = true );
-			$permission->CanDeleteOwn = count($allowedcats) > 0;
-		}
 		
 		$permission->CanChangeCat= $user->authorise('flexicontent.change.cat',	'com_flexicontent');
 		$permission->CanChangeSecCat= $user->authorise('flexicontent.change.cat.sec',	'com_flexicontent');
@@ -151,25 +119,29 @@ class FlexicontentHelperPerm
 		$permission->DisplayAllItems		= $user->authorise('flexicontent.displayallitems','com_flexicontent'); // (backend) List all items (otherwise only items that can be edited)
 		$permission->CanCopy			= $user->authorise('flexicontent.copyitems',	'com_flexicontent'); // (backend) Item Copy Task
 		$permission->CanOrder			= $user->authorise('flexicontent.orderitems',	'com_flexicontent'); // (backend) Reorder items inside the category
-		$permission->CanParams		= $user->authorise('flexicontent.paramsitem',	'com_flexicontent'); // (backend) Edit item parameters like meta data and template parameters
+		$permission->CanParams		= 1; // Legacy permission, we will not use it in FC v3.0.15+
 		$permission->CanVersion		= $user->authorise('flexicontent.versioning',	'com_flexicontent'); // (backend) Use item versioning
 		
-		$permission->AssocAnyTrans		= $user->authorise('flexicontent.assocanytrans',		'com_flexicontent'); // (item edit form) associate any translation
-		$permission->EditCreationDate	= $user->authorise('flexicontent.editcreationdate',	'com_flexicontent'); // (item edit form) edit creation date (frontend)
-		$permission->IgnoreViewState	= $user->authorise('flexicontent.ignoreviewstate',	'com_flexicontent'); // (Frontend Content Lists) ignore view state
-		$permission->RequestApproval	= $user->authorise('flexicontent.requestapproval',	'com_flexicontent'); // (Workflow) Send Approval Requests (for ANY draft items)
+		$permission->AssocAnyTrans		  = $user->authorise('flexicontent.assocanytrans',	  	'com_flexicontent'); // (item edit form) associate any translation
+		$permission->EditCreationDate	  = $user->authorise('flexicontent.editcreationdate',	  'com_flexicontent'); // (item edit form) edit creation date (frontend)
+		$permission->IgnoreViewState	  = $user->authorise('flexicontent.ignoreviewstate',	  'com_flexicontent'); // (Frontend Content Lists) ignore view state
+		$permission->RequestApproval	  = $user->authorise('flexicontent.requestapproval',	  'com_flexicontent'); // (Workflow) Send Approval Requests (for ANY draft items)
+		$permission->AutoApproveChanges = $user->authorise('flexicontent.autoapprovechanges',	'com_flexicontent'); // (Workflow) Can publish document changes regardless of edit state
 		
 		// CATEGORIES: management tab and usage
 		$permission->CanCats			= $user->authorise('flexicontent.managecats',	'com_flexicontent'); // (item edit form) view the categories which user cannot assign to items
 		$permission->ViewAllCats	= $user->authorise('flexicontent.usercats',		'com_flexicontent'); // (item edit form) view the categories which user cannot assign to items
-		$permission->ViewTree			= $user->authorise('flexicontent.viewtree',		'com_flexicontent'); // (item edit form) view categories as tree instead of flat list
+		$permission->ViewTree			= 1;  // Old (non-used) ACL, we will always displaying of categories as tree
 		$permission->MultiCat			= $user->authorise('flexicontent.multicat',		'com_flexicontent'); // (item edit form) allow user to assign items to multiple categories
-		$permission->CanAddCats		= $permission->CanAdd && $permission->CanCats;
+		
+		// REVIEWs: management tab and usage
+		$permission->CanReviews       = $user->authorise('flexicontent.managereviews',	'com_flexicontent');
+		$permission->CanCreateReviews = 1; //$user->authorise('flexicontent.createreviews',	'com_flexicontent');
 		
 		// TAGS: management tab and usage
 		$permission->CanTags			= $user->authorise('flexicontent.managetags',	'com_flexicontent'); // (backend) Allow management of Item Types
-		$permission->CanUseTags		= $user->authorise('flexicontent.usetags', 		'com_flexicontent'); // edit already assigned Tags of items
-		$permission->CanNewTags		= $user->authorise('flexicontent.newtags',		'com_flexicontent'); // add new Tags to items
+		$permission->CanUseTags		= $user->authorise('flexicontent.usetags', 		'com_flexicontent'); // edit tag assignments (item form)
+		$permission->CanCreateTags= $user->authorise('flexicontent.createtags',	'com_flexicontent'); // create new tags
 		
 		// VARIOUS management TABS: types, archives, statistics, templates, tags
 		$permission->CanTypes			= $user->authorise('flexicontent.managetypes',			'com_flexicontent'); // (backend) Allow management of Item Types
@@ -194,7 +166,7 @@ class FlexicontentHelperPerm
 		
 		// AUTHORS: management tab
 		$permission->CanAuthors		= $user->authorise('core.manage', 'com_users');
-		$permission->CanGroups		= FLEXI_J16GE ? $permission->CanAuthors : 0;
+		$permission->CanGroups		= $permission->CanAuthors;
 		
 		// SEARCH INDEX: management tab
 		$permission->CanIndex			= $permission->CanFields && ($permission->CanAddField || $permission->CanEditField);
@@ -202,12 +174,8 @@ class FlexicontentHelperPerm
 		// OTHER components permissions
 		$permission->CanPlugins	 	= $user->authorise('core.manage', 'com_plugins');
 		$permission->CanComments 	= $user->authorise('core.manage', 'com_jcomments');
-		$permission->CanComments	=	$permission->CanComments && $Comments_Enabled;
-		
-		// Global parameter to force always displaying of categories as tree
-		if (JComponentHelper::getParams('com_flexicontent')->get('cats_always_astree', 1)) {
-			$permission->ViewTree = 1;
-		}
+		$permission->CanComments	=	$permission->CanComments && $JComments_Installed;
+		$permission->JComments_Installed = $JComments_Installed;
 		
 		return $permission;
 	}
@@ -248,113 +216,29 @@ class FlexicontentHelperPerm
 		$db = JFactory::getDBO();
 		$usercats = array();
 		
-		// We ignore the user_id in the case FLEXIaccess, because FLEXIaccess only calculates access for current user,
-		// this is ok since, because we pass the user_id only for the purpose of being able to cache this function call
-		// -- passing by different user_id parameter this function call can be cached properly
-		$user = FLEXI_ACCESS ? JFactory::getUser() : JFactory::getUser($user_id);
+		// -- passing user_id parameter to this function allows to cache per user
+		$user = JFactory::getUser($user_id);
 		
-		if (FLEXI_J16GE)
+		$allcats = FlexicontentHelperPerm::returnAllCats ($check_published, $specific_catids);
+		
+		foreach ($allcats as $category_id)
 		{
-			// *** J1.6+ ***
-			$allcats = FlexicontentHelperPerm::returnAllCats ($check_published, $specific_catids);
+			// Construct asset name for the category
+			$asset = 'com_content.category.'.$category_id;
 			
-			foreach ($allcats as $category_id)
+			// Check all actions with Logical OR or Logical AND
+			// We start with FALSE for OR and TRUE for AND
+			$has_access = $require_all ? true : false;
+			foreach ($actions_allowed as $action_name)
 			{
-				// Construct asset name for the category
-				$asset = 'com_content.category.'.$category_id;
-				
-				// Check all actions with Logical OR or Logical AND
-				// We start with FALSE for OR and TRUE for AND
-				$has_access = $require_all ? true : false;
-				foreach ($actions_allowed as $action_name)
-				{
-					$has_access = $require_all ? ($has_access && $user->authorise($action_name, $asset)) : ($has_access || $user->authorise($action_name, $asset));
-				}
-				if ($has_access) {
-					$usercats[] = $category_id;
-					if ($find_first) break;  // J1.6+ performance consideration skip checking permissions of remaining categories
-				}
+				$has_access = $require_all ? ($has_access && $user->authorise($action_name, $asset)) : ($has_access || $user->authorise($action_name, $asset));
 			}
-			return $usercats;
-			
-		} else if (!FLEXI_ACCESS || $user->gid == 25) {
-			
-			// *** J1.5 without FLEXIaccess or user is super admin, return all category ids ***
-			
-			if ($user->gid < 19) return array();  // Less than J1.5 Author
-			return FlexicontentHelperPerm::returnAllCats ($check_published, $specific_catids);
-			
-		} else {
-			
-			// *** J1.5 with FLEXIaccess ***
-			$aro_value = $user->gmid; // FLEXIaccess group
-			
-			// Create a limit for aco (ACTION privilege)
-			$limit_aco = array();
-			if ( in_array('core.create',$actions_allowed) )
-				$limit_aco[] = 'aco = ' . $db->Quote('add');
-			if ( in_array('core.edit',$actions_allowed) )
-				$limit_aco[] = 'aco = ' . $db->Quote('edit');
-			if ( in_array('core.edit.own',$actions_allowed) )
-				$limit_aco[] = 'aco = ' . $db->Quote('editown');
-			
-			$oper = $require_all ? ' AND ' : ' OR ';
-			if  (count($limit_aco) ) {
-				$limit_aco = implode($oper, $limit_aco);
-			} else {
-				$limit_aco = 'aco = ' . $db->Quote('add') . $oper . ' aco = ' . $db->Quote('edit') . $oper . ' aco = ' . $db->Quote('editown');
+			if ($has_access) {
+				$usercats[] = $category_id;
+				if ($find_first) break;  // J1.6+ performance consideration skip checking permissions of remaining categories
 			}
-			
-			// We will search for permission all on the given permission (add,edit,editown),
-			// if found it means that there are no ACL limitations for given user, aka return all cats
-			$query	= 'SELECT COUNT(*) FROM #__flexiaccess_acl'
-					. ' WHERE acosection = ' . $db->Quote('com_content')
-					. ' AND ( ' . $limit_aco . ' )'
-					. ' AND arosection = ' . $db->Quote('users')
-					. ' AND aro IN ( ' . $aro_value . ' )'
-					. ' AND axosection = ' . $db->Quote('content')
-					. ' AND axo = ' . $db->Quote('all')
-					;
-			$db->setQuery($query);
-			
-			
-			// *** No limitations found, return all category ids ***
-			
-			if ($db->loadResult()) {
-				return FlexicontentHelperPerm::returnAllCats ($check_published, $specific_catids);
-			}
-			
-			// *** Limitations found, check and return category ids with 'create' permission ***
-			
-			// creating for -content- axosection is 'add' but for -category- axosection is 'submit'
-			$limit_aco = str_replace('add', 'submit', $limit_aco);
-			
-			$query	= 'SELECT axo FROM #__flexiaccess_acl'
-					. ' WHERE acosection = ' . $db->Quote('com_content')
-					. ' AND ( ' . $limit_aco . ' )'
-					. ' AND arosection = ' . $db->Quote('users')
-					. ' AND aro IN ( ' . $aro_value . ' )'
-					. ' AND axosection = ' . $db->Quote('category')
-					. ($specific_catids ? '  AND axo IN ('.implode(",", $specific_catids).')' : '')
-					;
-			$db->setQuery($query);
-			$allowedcats = FLEXI_J16GE ? $db->loadColumn() : $db->loadResultArray();
-			
-			$allowedcats = $allowedcats ? $allowedcats : array();
-			// we add all descendent to the array
-			foreach ($allowedcats as $allowedcat) {
-				$usercats[] = $allowedcat;
-				if ($globalcats[$allowedcat]->children) {
-					foreach ($globalcats[$allowedcat]->descendantsarray as $k => $v) {
-						if(!$check_published || $globalcats[$v]->published) {
-							$usercats[] = $v;
-						}
-					}
-				}
-			}
-			$usercats = array_unique($usercats);
-			return $usercats;
 		}
+		return $usercats;
 	}
 	
 	
@@ -421,7 +305,7 @@ class FlexicontentHelperPerm
 			// Query the assets table to retrieve the asset names for the specified section
 			$query = "SELECT name FROM #__assets WHERE name like '{$asset_partial}.%';";
 			$db->setQuery($query);
-			$names = FLEXI_J16GE ? $db->loadColumn() : $db->loadResultArray();
+			$names = $db->loadColumn();
 			if ($db->getErrorNum())  JFactory::getApplication()->enqueueMessage(__FUNCTION__.'(): SQL QUERY ERROR:<br/>'.nl2br($db->getErrorMsg()),'error');
 			
 			// Create an empty array that will contain the sections on which the user can perform the given action
@@ -497,6 +381,38 @@ class FlexicontentHelperPerm
 	}
 	
 	
+	
+	/*
+	 * Lookups the ACTION for the content type
+	 *
+	 * @access	public
+	 * @param	integer		$type_id		The TYPE ID
+	 * @param	string		$rule				The ACL rule name
+	 * @param	string		$type				A type object
+	 *
+	 * @return boolean							True if action is allowd
+	 * @since	3.0
+	 * 
+	 */
+	static function checkTypeAccess($type_id, $rule, $type=null)
+	{
+		static $allowed;
+		if (!$type_id) return true;  // a not set type defaults to true
+		
+		if ( !isset($allowed[$rule][$type_id]) )
+		{
+			if ($rule=='core.create')
+				$allowed[$rule][$type_id] = ($type ? ! $type->itemscreatable : true) || $user->authorise($rule, 'com_flexicontent.type.'.$type_id);
+			else
+				// featured not enabled yet
+				//$allowed[$rule][$type_id] = $user->authorise($rule, 'com_flexicontent.type.'.$type_id);
+				$allowed[$rule][$type_id] = true;
+		}
+		return $allowed[$rule][$type_id];
+	}
+	
+	
+	
 	//*******************************************************************************
 	// THIS function implementation  works properly too, but the above is more proper
 	//*******************************************************************************
@@ -566,18 +482,25 @@ class FlexicontentHelperPerm
 	}*/
 	
 
+	static function getPermAny($perm_type = null, $user_id = null)
+	{
+		// Find permissions for given user id
+		$user = $user_id ? JFactory::getUser($user_id) : JFactory::getUser();  // no user id given, use current user)
+		$user_id = $user->id;
+		
+		// Return already calculated data
+		static $permsAny = array();
+		if ( isset($permsAny[$user_id][$perm_type]) ) return $permsAny[$user_id][$perm_type];
+		
+		$permsAny[$user_id][$perm_type] = $user->authorise('core.create', 'com_flexicontent');
+		
+		if ($permsAny[$user_id][$perm_type] === NULL) {
+			// get Allowed Cats is cacheable
+			$allowedcats = FlexicontentHelperPerm::getAllowedCats( $user, $actions_allowed=array('core.create'), $require_all=true, $check_published = true, false, $find_first = true );
+			$permsAny[$user_id][$perm_type] = count($allowedcats) > 0;
+		}
+		
+		return $permsAny[$user_id][$perm_type];
+	}
 }
 
-
-class FlexiAccess extends JAccess {
-	public static function print_asset($asset='core.admin') {
-		/*if (empty(self::$assetRules[$asset])) {
-			self::$assetRules[$asset] = self::getAssetRules($asset, true);
-		}*/
-		echo "<pre style='font-size:12px;'>";
-		print_r(self::$assetRules);
-		echo "</pre>";
-	}	
-}
-
-?>

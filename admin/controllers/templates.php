@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.controller');
+// Register autoloader for parent controller, in case controller is executed by another component
+JLoader::register('FlexicontentController', JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'controller.php');
 
 /**
  * FLEXIcontent Component Templates Controller
@@ -41,6 +42,7 @@ class FlexicontentControllerTemplates extends FlexicontentController
 		// Register Extra task
 		$this->registerTask( 'add'  ,     'edit' );
 		$this->registerTask( 'apply',     'save' );
+		$this->registerTask( 'apply_modal', 'save' );
 	}
 
 
@@ -56,23 +58,34 @@ class FlexicontentControllerTemplates extends FlexicontentController
 		// Check for request forgeries
 		JRequest::checkToken() or jexit( 'Invalid Token' );
 		
-		$task		= JRequest::getVar('task');
-		$type 		= JRequest::getVar('type',  'items', '', 'word');
-		$folder 	= JRequest::getVar('folder',  'default', '', 'cmd');
-		$positions 	= JRequest::getVar('positions',  '');
+		$post   = JRequest::get( 'post' );
+		$task   = JRequest::getVar('task');
+		$type   = JRequest::getVar('type',  'items', '', 'word');
+		$folder = JRequest::getVar('folder',  'default', '', 'cmd');
+		$cfgname= JRequest::getVar('cfgname',  '', '', 'cmd');
 		
+		$positions = JRequest::getVar('positions',  '');
 		$positions = explode(',', $positions);
+		$attribs = $post['jform']['layouts'][$folder];
 		
-		//Sanitize
-		$post = JRequest::get( 'post' );
+		// Get model
 		$model = $this->getModel('template');
-
-		foreach ($positions as $p) {
-			$model->store($folder, $type, $p, $post[$p]);
-		}
-
+		
+		// Store field positions
+		$model->storeFieldPositions($folder, $cfgname, $type, $positions, $post);
+		
+		// Store Layout configurations (template parameters)
+		$model->storeLayoutConf($folder, $cfgname, $type, $attribs);
+		
+		// Store LESS configuration (less variables)
+		$model->storeLessConf($folder, $cfgname, $type, $attribs);
+		
 		switch ($task)
 		{
+			case 'apply_modal' :
+				$link = 'index.php?option=com_flexicontent&view=template&type='.$type.'&folder='.$folder.'&tmpl=component&ismodal=1';
+				break;
+
 			case 'apply' :
 				$link = 'index.php?option=com_flexicontent&view=template&type='.$type.'&folder='.$folder;
 				break;

@@ -42,7 +42,7 @@ class _flexicontent_fields_common extends JTable {
 	}
 }
 
-if (FLEXI_J30GE) {
+if (FLEXI_J30GE) {  // This is not removed to be an example of how to workaround adding TYPE to method parameters of parent class
 	class _flexicontent_fields extends _flexicontent_fields_common {
 		protected function _getAssetParentId(JTable $table = null, $id = null) {
 			return parent::__getAssetParentId($table, $id);
@@ -115,7 +115,7 @@ class flexicontent_fields extends _flexicontent_fields
 	/** @var boolean */
 	var $_trackAssets	= true;
 
-	function flexicontent_fields(& $db) {
+	function __construct(& $db) {
 		parent::__construct('#__flexicontent_fields', 'id', $db);
 	}
 	
@@ -131,7 +131,7 @@ class flexicontent_fields extends _flexicontent_fields
 		
 		//$newname = str_replace('-', '', JFilterOutput::stringURLSafe($this->label));
 
-		$pattern = '/^[a-z_]+[a-z_0-9]+$/i';
+		$pattern = '/^[a-z_]+[a-z_0-9-]+$/i';
 		$matches = NULL;
 		$false = !preg_match($pattern, $this->name, $matches);
 		if((empty($this->name) || $false) && $this->iscore != 1 ) {
@@ -319,7 +319,7 @@ class flexicontent_fields extends _flexicontent_fields
 			$query->where($this->_db->quoteName($k).' = '.(int) $this->$k);
 			$this->_db->setQuery($query);
 
-			if (!$this->_db->query()) {
+			if (!$this->_db->execute()) {
 				$e = new JException(JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED_UPDATE_ASSET_ID', $this->_db->getErrorMsg()));
 				$this->setError($e);
 				return false;

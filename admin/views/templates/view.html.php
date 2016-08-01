@@ -18,7 +18,7 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * View class for the FLEXIcontent templates screen
@@ -31,35 +31,53 @@ class FlexicontentViewTemplates extends JViewLegacy
 {
 	function display($tpl = null)
 	{
-		//initialise variables
-		$mainframe = JFactory::getApplication();
-		$option    = JRequest::getVar('option');
-		$document  = JFactory::getDocument();
-		$user      = JFactory::getUser();
-		$db        = JFactory::getDBO();
+		// ********************
+		// Initialise variables
+		// ********************
 		
-		JHTML::_('behavior.tooltip');
-		JHTML::_('behavior.modal');
+		$app     = JFactory::getApplication();
+		$jinput  = $app->input;
+		$option  = $jinput->get('option', '', 'cmd');
+		$view    = $jinput->get('view', '', 'cmd');
+		
+		$cparams  = JComponentHelper::getParams( 'com_flexicontent' );
+		$user     = JFactory::getUser();
+		$db       = JFactory::getDBO();
+		$document = JFactory::getDocument();
+		
+		
+		
+		// **************************
+		// Add css and js to document
+		// **************************
+		
+		flexicontent_html::loadFramework('select2');
+		//JHTML::_('behavior.tooltip');
+		
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
+		
+		
+		// *****************************
+		// Get user's global permissions
+		// *****************************
+		
+		$perms = FlexicontentHelperPerm::getPerm();
 
-		//add css and submenu to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
-
-		$permission = FlexicontentHelperPerm::getPerm();
-
-		if (!$permission->CanTemplates) {
-			$mainframe->redirect('index.php?option=com_flexicontent', JText::_( 'FLEXI_NO_ACCESS' ));
+		if (!$perms->CanTemplates) {
+			$app->redirect('index.php?option=com_flexicontent', JText::_( 'FLEXI_NO_ACCESS' ));
 		}
 		
-		// Get User's Global Permissions
-		$perms = FlexicontentHelperPerm::getPerm();
 		
-		//Create Submenu
+		
+		// ************************
+		// Create Submenu & Toolbar
+		// ************************
+		
+		// Create Submenu (and also check access to current view)
 		FLEXISubmenu('CanTemplates');
-		
-		
+				
 		// Create document/toolbar titles
 		$doc_title = JText::_( 'FLEXI_TEMPLATES' );
 		$site_title = $document->getTitle();
@@ -67,6 +85,29 @@ class FlexicontentViewTemplates extends JViewLegacy
 		$document->setTitle($doc_title .' - '. $site_title);
 		
 		// Create the toolbar
+		
+		$appsman_path = JPATH_COMPONENT_ADMINISTRATOR.DS.'views'.DS.'appsman';
+		if (file_exists($appsman_path))
+		{
+			$btn_icon = 'icon-download';
+			$btn_name = 'download';
+			$btn_task    = 'appsman.exportxml';
+			$extra_js    = " var f=document.getElementById('adminForm'); f.elements['view'].value='appsman'; jQuery('<input>').attr({type: 'hidden', name: 'table', value: 'flexicontent_templates'}).appendTo(jQuery(f));";
+			flexicontent_html::addToolBarButton(
+				'Export now',
+				$btn_name, $full_js='', $msg_alert='', $msg_confirm='Export now as XML',
+				$btn_task, $extra_js, $btn_list=false, $btn_menu=true, $btn_confirm=true, $btn_class="btn-warning", $btn_icon);
+			
+			$btn_icon = 'icon-box-add';
+			$btn_name = 'box-add';
+			$btn_task    = 'appsman.addtoexport';
+			$extra_js    = " var f=document.getElementById('adminForm'); f.elements['view'].value='appsman'; jQuery('<input>').attr({type: 'hidden', name: 'table', value: 'flexicontent_templates'}).appendTo(jQuery(f));";
+			flexicontent_html::addToolBarButton(
+				'Add to export',
+				$btn_name, $full_js='', $msg_alert='', $msg_confirm='Add to export list',
+				$btn_task, $extra_js, $btn_list=false, $btn_menu=true, $btn_confirm=true, $btn_class="btn-warning", $btn_icon);
+		}
+		
 		//JToolBarHelper::Back();
 		if ($perms->CanConfig) {
 			//JToolBarHelper::divider(); JToolBarHelper::spacer();
@@ -84,7 +125,14 @@ class FlexicontentViewTemplates extends JViewLegacy
 
 		//Get data from the model
 		$rows = $this->get( 'Data');
-
+		
+		// Get layout data
+		/*$tmpl	= flexicontent_tmpl::getTemplates();
+		foreach($rows as $row) {
+			$row->item_layout = @ $tmpl->items->{$row->name};
+			$row->category_layout = @ $tmpl->category->{$row->name};
+		}*/
+		
 		//assign data to template
 		$this->assignRef('rows'      		, $rows);
 		$this->assignRef('user'      		, $user);
@@ -92,6 +140,7 @@ class FlexicontentViewTemplates extends JViewLegacy
 		$this->assignRef('source'      		, $source);
 		$this->assignRef('dest'      		, $dest);
 
+		$this->sidebar = FLEXI_J30GE ? JHtmlSidebar::render() : null;
 		parent::display($tpl);
 	}
 }

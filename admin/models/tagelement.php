@@ -19,7 +19,8 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.model');
+jimport('legacy.model.legacy');
+use Joomla\String\StringHelper;
 
 /**
  * Flexicontent Component Tagelement Model
@@ -113,7 +114,7 @@ class FlexicontentModelTagelement extends JModelLegacy
 		// Lets load the content if it doesn't already exist
 		if (empty($this->_pagination))
 		{
-			jimport('joomla.html.pagination');
+			jimport('cms.pagination.pagination');
 			$this->_pagination = new JPagination( $this->getTotal(), $this->getState('limitstart'), $this->getState('limit') );
 		}
 
@@ -172,15 +173,15 @@ class FlexicontentModelTagelement extends JModelLegacy
 		$option = JRequest::getVar('option');
 
 		$search = $app->getUserStateFromRequest( $option.'.tags.search', 'search', '', 'string' );
-		$search = trim( JString::strtolower( $search ) );
+		$search = StringHelper::trim( StringHelper::strtolower( $search ) );
 
 		$where = array();
 
 		$where[] = 't.published = 1';
 
 		if ($search) {
-			$search_escaped = FLEXI_J16GE ? $this->_db->escape( $search, true ) : $this->_db->getEscaped( $search, true );
-			$where[] = ' LOWER(t.name) LIKE '.$this->_db->Quote( '%'.$search_escaped.'%', false );
+			$escaped_search = FLEXI_J16GE ? $this->_db->escape( $search, true ) : $this->_db->getEscaped( $search, true );
+			$where[] = ' LOWER(t.name) LIKE '.$this->_db->Quote( '%'.$escaped_search.'%', false );
 		}
 
 		$where 		= ( count( $where ) ? ' WHERE ' . implode( ' AND ', $where ) : '' );

@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.controller');
+// Register autoloader for parent controller, in case controller is executed by another component
+JLoader::register('FlexicontentController', JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'controller.php');
 
 /**
  * FLEXIcontent Component Import Controller
@@ -44,7 +45,7 @@ class FlexicontentControllerImport extends FlexicontentController
 	
 	function getlineno() {
 		$session = JFactory::getSession();
-		$has_zlib = version_compare(PHP_VERSION, '5.4.0', '>=');
+		$has_zlib = function_exists ( "zlib_encode" ); //version_compare(PHP_VERSION, '5.4.0', '>=');
 		
 		$conf   = $session->get('csvimport_config', "", 'flexicontent');
 		$conf		= unserialize( $conf ? ($has_zlib ? zlib_decode(base64_decode($conf)) : base64_decode($conf)) : "" );

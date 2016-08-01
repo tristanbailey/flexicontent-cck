@@ -19,7 +19,8 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.modellist');
+jimport('legacy.model.list');
+use Joomla\String\StringHelper;
 
 /**
  * FLEXIcontent Component Items Model
@@ -161,7 +162,7 @@ class FlexicontentModelArchive extends JModelList
 		// Lets load the content if it doesn't already exist
 		if (empty($this->_pagination))
 		{
-			jimport('joomla.html.pagination');
+			jimport('cms.pagination.pagination');
 			$this->_pagination = new JPagination( $this->getTotal(), $this->getState('limitstart'), $this->getState('limit') );
 		}
 
@@ -225,7 +226,7 @@ class FlexicontentModelArchive extends JModelList
 		$app    = JFactory::getApplication();
 		$option = JRequest::getVar('option');
 		$search = $app->getUserStateFromRequest( $option.'.archive.search', 'search', '', 'string' );
-		$search = trim( JString::strtolower( $search ) );
+		$search = StringHelper::trim( StringHelper::strtolower( $search ) );
 
 		$where = array();
 		
@@ -233,8 +234,8 @@ class FlexicontentModelArchive extends JModelList
 		$where[] = FLEXI_J16GE ? ' c.extension="'.FLEXI_CAT_EXTENSION.'"' : ' i.sectionid = '.FLEXI_SECTION;
 		
 		if ($search) {
-			$search_escaped = FLEXI_J16GE ? $this->_db->escape( $search, true ) : $this->_db->getEscaped( $search, true );
-			$where[] = ' LOWER(i.title) LIKE '.$this->_db->Quote( '%'.$search_escaped.'%', false );
+			$escaped_search = FLEXI_J16GE ? $this->_db->escape( $search, true ) : $this->_db->getEscaped( $search, true );
+			$where[] = ' LOWER(i.title) LIKE '.$this->_db->Quote( '%'.$escaped_search.'%', false );
 		}
 
 		$where 		= ( count( $where ) ? ' WHERE ' . implode( ' AND ', $where ) : '' );
@@ -260,7 +261,7 @@ class FlexicontentModelArchive extends JModelList
 
 			$this->_db->setQuery( $query );
 			
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -272,7 +273,7 @@ class FlexicontentModelArchive extends JModelList
 
 			$this->_db->setQuery( $query );
 			
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -283,7 +284,7 @@ class FlexicontentModelArchive extends JModelList
 					;
 			$this->_db->setQuery($query);
 
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -294,7 +295,7 @@ class FlexicontentModelArchive extends JModelList
 					;
 			$this->_db->setQuery($query);
 
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -305,7 +306,7 @@ class FlexicontentModelArchive extends JModelList
 					;
 			$this->_db->setQuery($query);
 
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -317,7 +318,7 @@ class FlexicontentModelArchive extends JModelList
 
 			$this->_db->setQuery( $query );
 
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -373,7 +374,7 @@ class FlexicontentModelArchive extends JModelList
 					. ' AND ( checked_out = 0 OR ( checked_out = ' .$userid. ' ) )'
 			;
 			$this->_db->setQuery( $query );
-			if (!$this->_db->query()) {
+			if (!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}

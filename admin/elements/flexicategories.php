@@ -18,18 +18,24 @@
 
 // Check to ensure this file is included in Joomla!
 defined('_JEXEC') or die('Restricted access');
-if (FLEXI_J16GE) {
-	jimport('joomla.html.html');
-	jimport('joomla.form.formfield');
-}
 
+jimport('cms.html.html');      // JHtml
+jimport('cms.html.select');    // JHtmlSelect
+jimport('joomla.form.field');  // JFormField
+
+//jimport('joomla.form.helper'); // JFormHelper
+//JFormHelper::loadFieldClass('...');   // JFormField...
+
+if (!defined('DS'))  define('DS',DIRECTORY_SEPARATOR);
 JTable::addIncludePath(JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'tables');
+
 // Load the category class
 require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'classes'.DS.'flexicontent.categories.php');
+
 // Load the helper classes
 require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'classes'.DS.'flexicontent.helper.php');
 		
-FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
+JHtml::_('behavior.framework', true);
 flexicontent_html::loadFramework('jQuery');
 flexicontent_html::loadFramework('select2');
 
@@ -99,17 +105,15 @@ class JFormFieldFlexicategories extends JFormField
 				."if (parent.hasClass(\"jpane-slider\")) parent.setStyle(\"height\", \"auto\");"
 			;
 			$style = 'display:inline-block;'.(FLEXI_J16GE ? 'float:left; margin: 6px 0px 0px 18px;':'margin:0px 0px 6px 12px');
-			$maximize_link = "<a style='$style' href='javascript:;' onclick='$onclick' >Maximize/Minimize</a>";*/
+			*/
 		} else {
-			//$maximize_link = '';
 		}
-		$maximize_link = '';
 		
 		$top = @$attributes['top'] ? $attributes['top'] : false;
 		
 		$classes = 'use_select2_lib ';
-		$classes .= ( @$attributes['required'] && @$attributes['required']!='false' ) ? ' required' : '';
-		$classes .= $node->attributes('validation_class') ? ' '.$node->attributes('validation_class') : '';
+		$classes .= @$attributes['required'] && @$attributes['required']!='false' ? ' required' : '';
+		$classes .= @$attributes['class'] ? ' '.$attributes['class'] : '';
 		$classes = ' class="'.$classes.'"';
 		$attribs .= $classes .' style="float:left;" ';
 		
@@ -149,7 +153,7 @@ class JFormFieldFlexicategories extends JFormField
 			false, true, $actions_allowed=array('core.create')
 		);
 		
-		return $html.$maximize_link;
+		return $html;
 	}
 }
 ?>

@@ -19,7 +19,7 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * HTML View class for the FLEXIcontent View
@@ -46,10 +46,6 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		$db       = JFactory::getDBO();
 		$print_logging_info = $params->get('print_logging_info');
 		
-		FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
-		flexicontent_html::loadFramework('jQuery');
-		JHTML::_('behavior.tooltip');
-		
 		// Special displaying when getting flexicontent version
 		$layout = JRequest::getVar('layout', 'default');
 		if($layout=='fversion') {
@@ -57,18 +53,16 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 			return;
 		}
 		
-		//Load pane behavior
-		if (!FLEXI_J16GE)
-			jimport('joomla.html.pane');
-		// load the file system librairies
+		// Load the file system librairies
 		jimport('joomla.filesystem.folder');
-		jimport('joomla.filesystem.file');	
+		jimport('joomla.filesystem.file');
+		
 		// activate the tooltips
-		JHTML::_('behavior.tooltip');
+		//JHTML::_('behavior.tooltip');
 
 		// handle jcomments integration
-		if (JPluginHelper::isEnabled('system', 'jcomments.system') || JPluginHelper::isEnabled('system', 'jcomments')) {
-			$CanComments 	= 1;
+		if (JPluginHelper::isEnabled('system', 'jcomments')) {
+			$JComments_Installed 	= 1;
 			$destpath		= JPATH_SITE.DS.'components'.DS.'com_jcomments'.DS.'plugins';
 			$dest 			= $destpath.DS.'com_flexicontent.plugin.php';
 			$source 		= JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'librairies'.DS.'jcomments'.DS.'com_flexicontent.plugin.php';
@@ -86,7 +80,7 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 				}
 			}
 		} else {
-			$CanComments 	= 0;
+			$JComments_Installed 	= 0;
 		}
 
 		// handle joomfish integration
@@ -113,18 +107,18 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		$model = $this->getModel('flexicontent');
 		
 		// initialise template related variables
-		if (!FLEXI_J16GE)
-			$pane = JPane::getInstance('sliders');
 		$template	= $app->getTemplate();
 		$themes		= flexicontent_tmpl::getThemes();
 		
 		// Get data from the model
 		if ( $print_logging_info )  global $fc_run_times;
 		if ( $print_logging_info ) $start_microtime = microtime(true);
-		$draft      = $model->getDraft();   $db->setQuery("SELECT FOUND_ROWS()");	 $totalrows['draft'] = $db->loadResult();
-		$pending    = $model->getPending();   $db->setQuery("SELECT FOUND_ROWS()");	 $totalrows['pending'] = $db->loadResult();
-		$revised    = $model->getRevised();   $db->setQuery("SELECT FOUND_ROWS()");	 $totalrows['revised'] = $db->loadResult();
-		$inprogress = $model->getInprogress();   $db->setQuery("SELECT FOUND_ROWS()");	 $totalrows['inprogress'] = $db->loadResult();
+		$totalrows = array();
+		$_total = 0;
+		$draft      = $model->getDraft($_total);       $totalrows['draft'] = $_total;
+		$pending    = $model->getPending($_total);     $totalrows['pending'] = $_total;
+		$revised    = $model->getRevised($_total);     $totalrows['revised'] = $_total;
+		$inprogress = $model->getInprogress($_total);  $totalrows['inprogress'] = $_total;
 		if ( $print_logging_info ) $fc_run_times['quick_sliders'] = round(1000000 * 10 * (microtime(true) - $start_microtime)) / 10;
 		
 		
@@ -147,11 +141,12 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		$postinst_integrity_ok = $session->get('flexicontent.postinstall');
 		// THE FOLLOWING WILL ONLY BE DISPLAYED IF $DOPOSTINSTALL IS INCOMPLETE
 		// SO WHY CALCULATE THEM, WE SKIP THEM, USER MUST LOG OUT ANYWAY TO SEE THEM ...
-		if(($postinst_integrity_ok===NULL) || ($postinst_integrity_ok===false) || $optional_tasks) {
+		
+		if(($postinst_integrity_ok===NULL) || ($postinst_integrity_ok===false)) {
 			$use_versioning = $params->get('use_versioning', 1);
 			
-			$existmenuitems	= $model->getExistMenuItems();
 			$existtype 			= $model->getExistType();
+			$existmenuitems	= $model->getExistMenuItems();
 			$existfields 		= $model->getExistFields();
 			
 			$existfplg 			= $model->getExistFieldsPlugins();
@@ -160,45 +155,57 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 			
 			$existcats					= !$model->getItemsNoCat();
 			$existlang	 				= $model->getExistLanguageColumns() && !$model->getItemsNoLang();
-			$existdbindexes			= $model->getExistDBindexes($check_only=false);
-			$itemcountingdok    = $model->getItemCountingDataOK();
 			$existversions 			= $model->getExistVersionsTable();
 			$existversionsdata	= !$use_versioning || $model->getExistVersionsPopulated();
-			
 			$existauthors			= $model->getExistAuthorsTable();
-			$cachethumb				= $model->getCacheThumbChmod();
-			$oldbetafiles			= true; //$model->getOldBetaFiles();
+
+			$deprecatedfiles	= $model->getDeprecatedFiles();
 			$nooldfieldsdata	= $model->getNoOldFieldsData();
-			$missingversion		= !$use_versioning || !$model->checkCurrentVersionData();
+			$missingversion		= true; //!$use_versioning || !$model->checkCurrentVersionData();
+			$cachethumb				= $model->getCacheThumbChmod();
 			
-			$initialpermission = FLEXI_J16GE ? $model->checkInitialPermission() : true;
+			$existdbindexes    = ! (boolean) ($missingindexes = $model->getExistDBindexes($check_only=false));
+			$itemcountingdok   = $model->getItemCountingDataOK();
+			$initialpermission = $model->checkInitialPermission();
 			
-			// Check if old field positions were converted
-			$model->getFieldsPositions();
+		} else if ($optional_tasks) {  // IF optional tasks do not recheck instead just set the FLAGS to true
+			$existtype = $existmenuitems = $existfields = true;
+			$existfplg = $existseplg = $existsyplg = true;
+		  $existcats = $existlang = $existversions = $existversionsdata = $existauthors = true;
+		  $deprecatedfiles = $nooldfieldsdata = $missingversion = $cachethumb = true;
+		  $existdbindexes = $itemcountingdok = $initialpermission = true;
+		  $missingindexes = array();
 		}
 		
 		
-		// Add custom css and js to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
 		
-		$document->addStyleDeclaration('
-			.pane-sliders {
-				margin: -7px 0px 0px 0px !important;
-				position: relative;
-			}'
-		);
+		// **************************
+		// Add css and js to document
+		// **************************
+		
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
 		
 		$css =	'.install-ok { background: url(components/com_flexicontent/assets/images/accept.png) 0% 50% no-repeat transparent; padding:1px 0; width: 20px; height:16px; display:block; }
 				 .install-notok { background: url(components/com_flexicontent/assets/images/delete.png) 0% 50% no-repeat transparent; padding:1px 0; width: 20px; height:16px; display:block; float:left;}';		
 		$document->addStyleDeclaration($css);
 		
 		
-		//Create Submenu
-		FLEXISubmenu('notvariable');
 		
+		// *****************************
+		// Get user's global permissions
+		// *****************************
+		
+		$perms = FlexicontentHelperPerm::getPerm();
+		
+		
+		
+		// ************************
+		// Create Submenu & Toolbar
+		// ************************
+		
+		// Create Submenu (and also check access to current view)
+		FLEXISubmenu('notvariable');
 		
 		// Create document/toolbar titles
 		$doc_title = JText::_( 'FLEXI_DASHBOARD' );
@@ -207,10 +214,8 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		$document->setTitle($doc_title .' - '. $site_title);
 		
 		// Create the toolbar
-		// Get User's Global Permissions
-		$perms = FlexicontentHelperPerm::getPerm();
 		if (version_compare(PHP_VERSION, '5.0.0', '>')) {
-			$js = "window.addEvent('domready', function(){";
+			$js = "jQuery(document).ready(function(){";
 			
 			if($perms->CanConfig)  {
 				$toolbar = JToolBar::getInstance('toolbar');
@@ -279,8 +284,6 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		$website 	= $app->getCfg('live_site');
 
 				
-		if (!FLEXI_J16GE)
-			$this->assignRef('pane'			, $pane);
 		$this->assignRef('pending'		, $pending);
 		$this->assignRef('revised'		, $revised);
 		$this->assignRef('draft'		, $draft);
@@ -301,30 +304,35 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		// install check
 		$this->assignRef('dopostinstall'	, $postinst_integrity_ok);
 		$this->assignRef('allplgpublish'	, $allplgpublish);
-		$this->assignRef('existmenuitems'	, $existmenuitems);
+		
 		$this->assignRef('existtype'			, $existtype);
+		$this->assignRef('existmenuitems'	, $existmenuitems);
 		$this->assignRef('existfields'		, $existfields);
+		
 		$this->assignRef('existfplg'			, $existfplg);
 		$this->assignRef('existseplg'			, $existseplg);
 		$this->assignRef('existsyplg'			, $existsyplg);
+		
 		$this->assignRef('existcats'			, $existcats);
 		$this->assignRef('existlang'			, $existlang);
-		$this->assignRef('existdbindexes'	, $existdbindexes);
-		$this->assignRef('itemcountingdok', $itemcountingdok);
 		$this->assignRef('existversions'		, $existversions);
 		$this->assignRef('existversionsdata', $existversionsdata);
 		$this->assignRef('existauthors'			, $existauthors);
-		$this->assignRef('cachethumb'				, $cachethumb);
-		$this->assignRef('oldbetafiles'			, $oldbetafiles);
+		
+		$this->assignRef('deprecatedfiles'	, $deprecatedfiles);
 		$this->assignRef('nooldfieldsdata'	, $nooldfieldsdata);
 		$this->assignRef('missingversion'		, $missingversion);
-		if (FLEXI_J16GE)
-			$this->assignRef('initialpermission', $initialpermission);
+		$this->assignRef('cachethumb'				, $cachethumb);
+
+		$this->assignRef('existdbindexes'	, $existdbindexes); $this->assignRef('missingindexes', $missingindexes);
+		$this->assignRef('itemcountingdok', $itemcountingdok);
+		$this->assignRef('initialpermission', $initialpermission);
 		
 		// assign Rights to the template
 		$this->assignRef('perms'		, $perms);
 		$this->assignRef('document'		, $document);
 
+		$this->sidebar = FLEXI_J30GE ? JHtmlSidebar::render() : null;
 		parent::display($tpl);
 
 	}
@@ -337,35 +345,25 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 	 * @param string $text image description
 	 * @param boolean $modal 1 for loading in modal
 	 */
-	function quickiconButton( $link, $image, $text, $modal = 0, $modaliframe = 1 )
+	function quickiconButton( $link, $image, $text, $modal = 0, $modal_create_iframe = 1, $modal_width=0, $modal_height=0)
 	{
 		//initialise variables
 		$lang = JFactory::getLanguage();
-  		?>
-
-		<div style="float:<?php echo ($lang->isRTL()) ? 'right' : 'left'; ?>;">
-			<div class="icon">
-				<?php
-				if ($modal == 1) {
-					JHTML::_('behavior.modal');
-					$rel = $modaliframe?" rel=\"{handler: 'iframe', size: {x: 900, y: 500}}\"":'';
-				?>
-					<a href="<?php echo $link; ?>" style="cursor:pointer" class="modal"<?php echo $rel;?>>
-				<?php
-				} else {
-				?>
-					<a href="<?php echo $link; ?>">
-				<?php
-				}
-
-					echo FLEXI_J16GE ?
-						JHTML::image('administrator/components/com_flexicontent/assets/images/'.$image, $text) :
-						JHTML::_('image.site', $image, '../administrator/components/com_flexicontent/assets/images/', NULL, NULL, $text) ;
-				?>
-					<span><?php echo $text; ?></span>
-				</a>
-			</div>
-		</div>
+		$link_attribs = $modal ? 'onclick="var url = jQuery(this).attr(\'href\'); fc_showDialog(url, \'fc_modal_popup_container\', '.((int)(!$modal_create_iframe)).', '.$modal_width.', '.$modal_height.'); return false;"' : '';
+		$img_attribs  = ' class="fc-board-btn-img"';
+  	?>
+		<span class="fc-board-button" style="float:<?php echo ($lang->isRTL()) ? 'right' : 'left'; ?>;">
+			<span class="fc-board-button-inner">
+				
+				<?php if ($link) : ?><a href="<?php echo $link; ?>" class="fc-board-button-link" <?php echo $link_attribs; ?>><?php endif; ?>
+					<?php echo FLEXI_J16GE ?
+						JHTML::image('administrator/components/com_flexicontent/assets/images/'.$image, $text, $img_attribs) :
+						JHTML::_('image.site', $image, '../administrator/components/com_flexicontent/assets/images/', NULL, NULL, $text, $attribs); ?>
+					<span class="fc-board-btn-text <?php echo $link ? '' : ' fcdisabled'; ?>"><?php echo $text; ?></span>
+				<?php if ($link) : ?></a><?php endif; ?>
+				
+			</span>
+		</span>
 		<?php
 	}
 	
@@ -385,6 +383,7 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		$check = array();
 		$check['connect'] = 0;
 		$check['current_version'] = $com_xml['version'];
+		$check['current_creationDate'] = $com_xml['creationDate'];
 
 		//try to connect via cURL
 		if (function_exists('curl_init') && function_exists('curl_exec')) {
@@ -402,7 +401,7 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 						
 			@curl_close($ch);
 		}
-
+		
 		//try to connect via fsockopen
 		if(function_exists('fsockopen') && $data == '') {
 
@@ -463,41 +462,29 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 			@fclose($handle);
 		}
 		
-		if( $data && strstr($data, '<?xml version="1.0" encoding="utf-8"?><update>') ) {
-			if (!FLEXI_J16GE) {
-				$xml = JFactory::getXMLparser('Simple');
-				$xml->loadString($data);
-				$version           = & $xml->document->version[0];
-				$check['version']  = $version->data();
-				$released          = & $xml->document->released[0];
-				$check['released'] = $released->data();
-				$check['connect']  = 1;
-				$check['enabled']  = 1;
-				$check['current']  = version_compare( $check['current_version'], $check['version'] );
-			} else {
-				$xml = JFactory::getXML($data, $isFile=false);
-				$check['version']  = (string)$xml->version;
-				$check['released'] = (string)$xml->released;
-				$check['connect']  = 1;
-				$check['enabled']  = 1;
-				$check['current']  = version_compare( $check['current_version'], $check['version'] );
-			}
+		if( $data && strstr($data, '<?xml') )
+		{
+			$xml = JFactory::getXML($data, $isFile=false);
+			$check['version']  = (string)$xml->version;
+			$check['released'] = (string)$xml->released;
+			$check['connect']  = 1;
+			$check['enabled']  = 1;
+			$check['current']  = version_compare( str_replace(' ', '', $check['current_version']), str_replace(' ', '', $check['version']) );
 		}
 		
 		return $check;
 	}
 	
 	
-	function fversion(&$tpl, &$params) {
+	function fversion(&$tpl, &$params)
+	{
 		// Cache update check of FLEXIcontent version
-		if( $params->get('show_updatecheck', 1) )
-		{
-			$cache = JFactory::getCache('com_flexicontent');
-			$cache->setCaching( 1 );
-			$cache->setLifeTime( 24*3600 );  // Set expire time (hard-code this to 1 day), since it is costly
-			$check = $cache->get(array( 'FlexicontentViewFlexicontent', 'getUpdateComponent'), array('component'));
-			$this->assignRef('check', $check);
-		}
+		$cache = JFactory::getCache('com_flexicontent');
+		$cache->setCaching( 1 );
+		$cache->setLifeTime( 3600 );  // Set expire time (hard-code this to 1 hour), to avoid server load
+		$check = $cache->get(array( 'FlexicontentViewFlexicontent', 'getUpdateComponent'), array('component'));
+		$this->assignRef('check', $check);
+		
 		parent::display($tpl);
 	}
 }

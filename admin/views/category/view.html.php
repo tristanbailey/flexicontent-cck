@@ -18,7 +18,7 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * View class for the FLEXIcontent category screen
@@ -36,24 +36,22 @@ class FlexicontentViewCategory extends JViewLegacy
 		$user     = JFactory::getUser();
 		$document = JFactory::getDocument();
 		
-		if (FLEXI_J16GE) {
-			JFactory::getLanguage()->load('com_categories', JPATH_ADMINISTRATOR, 'en-GB', true);
-			JFactory::getLanguage()->load('com_categories', JPATH_ADMINISTRATOR, null, true);
-		}
-		
+		JFactory::getLanguage()->load('com_categories', JPATH_ADMINISTRATOR, 'en-GB', true);
+		JFactory::getLanguage()->load('com_categories', JPATH_ADMINISTRATOR, null, true);
+
+
 		// ***********************************************************
 		// Get category data, and check if item is already checked out
 		// ***********************************************************
 		
 		// Get data from the model
 		$model		= $this->getModel();
-		if (FLEXI_J16GE) {
-			$row  = $this->get( 'Item' );
-			$form = $this->get( 'Form' );
-		} else {
-			$row  = $this->get( 'Category' );
-		}
-		$catparams = FLEXI_J16GE ? new JRegistry($row->params) : new JParameter($row->params);
+		$row  = $this->get( 'Item' );
+		$form = $this->get( 'Form' );
+		
+		// Get category parameters and inherited parameters
+		$catparams = new JRegistry($row->params);
+		$iparams   = $this->get( 'InheritedParams' );
 		
 		$cid    =	$row->id;
 		$isnew  = !$cid;
@@ -63,13 +61,14 @@ class FlexicontentViewCategory extends JViewLegacy
 			JError::raiseWarning( 'SOME_ERROR_CODE', $row->title.' '.JText::_( 'FLEXI_EDITED_BY_ANOTHER_ADMIN' ));
 			$app->redirect( 'index.php?option=com_flexicontent&view=categories' );
 		}
-		
-		
+
+
 		// ***************************************************************************
 		// Currently access checking for category add/edit form , it is done here, for
 		// most other views we force going though the controller and checking it there
 		// ***************************************************************************
-		
+
+
 		// *********************************************************************************************
 		// Global Permssions checking (needed because this view can be called without a controller task)
 		// *********************************************************************************************
@@ -82,33 +81,26 @@ class FlexicontentViewCategory extends JViewLegacy
 			$app->redirect('index.php?option=com_flexicontent', JText::_( 'FLEXI_NO_ACCESS' ));
 		}
 		
-		// Check no privilege to create new categories (Global permission)
-		if ( $isnew && !$perms->CanAddCats ) {
+		// Check no privilege to create new category under any category
+		if ( $isnew && (!$perms->CanCats || !FlexicontentHelperPerm::getPermAny('core.create')) ) {
 			JError::raiseWarning( 403, JText::_( 'FLEXI_NO_ACCESS_CREATE' ) );
 			$app->redirect( 'index.php?option=com_flexicontent' );
 		}
-		
-		
+
+
 		// ************************************************************************************
-		// Record Permssions (needed because this view can be called without a controller task)
+		// Record Permissions (needed because this view can be called without a controller task)
 		// ************************************************************************************
 				
 		// Get edit privilege for current category
 		if (!$isnew) {
-			if (FLEXI_J16GE) {
-				$isOwner = $row->get('created_by') == $user->id;
-				$rights = FlexicontentHelperPerm::checkAllItemAccess($user->id, 'category', $cid);
-				$canedit_cat   = in_array('edit', $rights) || (in_array('edit.own', $rights) && $isOwner);
-			} else if (FLEXI_ACCESS) {
-				$rights = FAccess::checkAllItemAccess('com_content', 'users', $user->gmid, 0,$row->id);
-				$canedit_cat = ($user->gid < 25) ? (in_array('edit', $rights) || in_array('editown', $rights)) : 1;
-			} else {
-				$canedit_cat = true;
-			}
+			$isOwner = $row->get('created_by') == $user->id;
+			$rights = FlexicontentHelperPerm::checkAllItemAccess($user->id, 'category', $cid);
+			$canedit_cat   = in_array('edit', $rights) || (in_array('edit.own', $rights) && $isOwner);
 		}
 		
 		// Get if we can create inside at least one (com_content) category
-		if ( !FLEXI_J16GE || $user->authorise('core.create', 'com_flexicontent') ) {
+		if ( $user->authorise('core.create', 'com_flexicontent') ) {
 			$cancreate_cat = true;
 		} else {
 			$usercats = FlexicontentHelperPerm::getAllowedCats($user, $actions_allowed = array('core.create')
@@ -130,47 +122,39 @@ class FlexicontentViewCategory extends JViewLegacy
 			JError::raiseWarning( 403, $acc_msg);
 			$app->redirect( 'index.php?option=com_flexicontent&view=categories' );
 		}
-		
-		
+
+
 		// **************************************************
 		// Include needed files and add needed js / css files
 		// **************************************************
 		
-		FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
-		flexicontent_html::loadFramework('jQuery');
-		flexicontent_html::loadFramework('select2');
-		
-		// Load pane behavior
-		jimport('joomla.html.pane');
-		// Load tooltips
-		JHTML::_('behavior.tooltip');
-		
 		// Add css to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
 		
-		// Add js function to overload the joomla submitform
-		$document->addScript(JURI::root().'components/com_flexicontent/assets/js/admin.js');
-		$document->addScript(JURI::root().'components/com_flexicontent/assets/js/validate.js');
+		// Add JS frameworks
+		flexicontent_html::loadFramework('select2');
+		flexicontent_html::loadFramework('flexi-lib-form');
 		
-		
+		// Add js function to overload the joomla submitform validation
+		JHTML::_('behavior.formvalidation');  // load default validation JS to make sure it is overriden
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/admin.js', FLEXI_VHASH);
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/validate.js', FLEXI_VHASH);
+
+
 		// ********************
 		// Initialise variables
 		// ********************
 		
 		$editor_name = $user->getParam('editor', $app->getCfg('editor'));
-		$editor 	   = JFactory::getEditor($editor_name);
+		$editor  = JFactory::getEditor($editor_name);
 		$cparams = JComponentHelper::getParams('com_flexicontent');
-		$bar     = JToolBar::getInstance('toolbar');
-		if (!FLEXI_J16GE) {
-			$pane  = JPane::getInstance('sliders');
-			$tpane = JPane::getInstance('tabs', array('startOffset'=>0, 'allowAllClose'=>true, 'opacityTransition'=>true, 'duration'=>600));
-		}
 		$categories = $globalcats;
 		
-		
+		$bar     = JToolBar::getInstance('toolbar');
+		$tip_class = FLEXI_J30GE ? ' hasTooltip' : ' hasTip';
+
+
 		// ******************
 		// Create the toolbar
 		// ******************
@@ -178,111 +162,126 @@ class FlexicontentViewCategory extends JViewLegacy
 		// Create Toolbar title and add the preview button
 		if ( !$isnew ) {
 			JToolBarHelper::title( JText::_( 'FLEXI_EDIT_CATEGORY' ), 'fc_categoryedit' );
-			$autologin		= $cparams->get('autoflogin', 1) ? '&fcu='.$user->username . '&fcp='.$user->password : '';
-			$previewlink 	= JRoute::_(JURI::root(). FlexicontentHelperRoute::getCategoryRoute($categories[$cid]->slug)) . $autologin;
-			// Add a preview button
-			$bar->appendButton( 'Custom', '<a class="preview btn btn-small" href="'.$previewlink.'" target="_blank"><span title="'.JText::_('Preview').'" class="icon-32-preview"></span>'.JText::_('Preview').'</a>', 'preview' );
 		} else {
 			JToolBarHelper::title( JText::_( 'FLEXI_NEW_CATEGORY' ), 'fc_categoryadd' );
 		}
 		
 		// Add apply and save buttons
-		if (FLEXI_J16GE) {
-			JToolBarHelper::apply('category.apply');
-			JToolBarHelper::save('category.save');
-		} else {
-			JToolBarHelper::apply();
-			JToolBarHelper::save();
-		}
+		JToolBarHelper::apply('category.apply', 'FLEXI_APPLY');
+		if ( !$isnew ) flexicontent_html::addToolBarButton(
+			'FLEXI_FAST_APPLY', $btn_name='apply_ajax', $full_js="Joomla.submitbutton('category.apply_ajax')", $msg_alert='', $msg_confirm='',
+			$btn_task='category.apply_ajax', $extra_js='', $btn_list=false, $btn_menu=true, $btn_confirm=false, $btn_class="", $btn_icon="icon-loop");
+		JToolBarHelper::save('category.save');
 		
 		// Add a save and new button, if user can create inside at least one (com_content) category
 		if ( $cancreate_cat ) {
-			if (FLEXI_J16GE) JToolBarHelper::save2new('category.save2new');
-			else             JToolBarHelper::custom( 'saveandnew', 'savenew.png', 'savenew.png', 'FLEXI_SAVE_AND_NEW', false );
+			JToolBarHelper::save2new('category.save2new');
 		}
 		
 		// Add a save as copy button, if editing an existing category (J2.5 only)
-		if (FLEXI_J16GE && !$isnew && $cancreate_cat) {
+		if (!$isnew && $cancreate_cat) {
 			JToolBarHelper::save2copy('category.save2copy');
 		}
 		
 		// Add a cancel or close button
 		if ($isnew)  {
-			if (FLEXI_J16GE) JToolBarHelper::cancel('category.cancel');
-			else             JToolBarHelper::cancel();
+			JToolBarHelper::cancel('category.cancel');
 		} else {
-			if (FLEXI_J16GE) JToolBarHelper::cancel('category.cancel', 'JTOOLBAR_CLOSE');
-			else             JToolBarHelper::custom('cancel', 'cancel.png', 'cancel.png', 'CLOSE', false );
+			JToolBarHelper::cancel('category.cancel', 'JTOOLBAR_CLOSE');
 		}
+
+
+		// ******************
+		// Add preview button
+		// ******************
 		
-		
-		// *******************************************
-		// Prepare data to pass to the form's template
-		// *******************************************
-		
-		if ( !FLEXI_J16GE ) {
-			//clean data
-			JFilterOutput::objectHTMLSafe( $row, ENT_QUOTES, 'description' );
+		if ( !$isnew ) {
+			JToolBarHelper::divider();
 			
-			// Create the form
-			$form = new JParameter($row->params, JPATH_COMPONENT.DS.'models'.DS.'category.xml');
-			//$form->loadINI($row->attribs);
+			$autologin		= ''; //$cparams->get('autoflogin', 1) ? '&fcu='.$user->username . '&fcp='.$user->password : '';
+			$previewlink 	= JRoute::_(JURI::root(). FlexicontentHelperRoute::getCategoryRoute($categories[$cid]->slug)) . $autologin;
+			// Add a preview button
+			$bar->appendButton( 'Custom', '<a class="preview btn btn-small btn-info spaced-btn" href="'.$previewlink.'" target="_blank" ><span title="'.JText::_('FLEXI_PREVIEW').'" class="icon-screen"></span>'.JText::_('FLEXI_PREVIEW').'</a>', 'preview' );
+		}
+
+
+		// ************************
+		// Add modal layout editing
+		// ************************
+		
+		if (!$isnew && $perms->CanTemplates)
+		{
+			$inheritcid_comp = $cparams->get('inheritcid', -1);
+			$inheritcid = $catparams->get('inheritcid', '');
+			$inherit_parent = $inheritcid==='-1' || ($inheritcid==='' && $inheritcid_comp);
 			
-			//echo "<pre>"; print_r($form->_xml['templates']->_children[0]);  echo "<pre>"; print_r($form->_xml['templates']->param[0]); exit;
-			foreach($form->_xml['templates']->_children as $i => $child) {
-				if ( isset($child->_attributes['enableparam']) && !$cparams->get($child->_attributes['enableparam']) ) {
-					unset($form->_xml['templates']->_children[$i]);
-					unset($form->_xml['templates']->param[$i]);
+
+			if (!$inherit_parent || $row->parent_id==='1')
+				$row_clayout = $catparams->get('clayout', $cparams->get('clayout', 'blog'));
+			else {
+				$row_clayout = $catparams->get('clayout', '');
+
+				if (!$row_clayout)
+				{
+					$_ancestors = $this->getModel()->getParentParams($row->id);  // This is ordered by level ASC
+					$row_clayout = $cparams->get('clayout', 'blog');
+					$cats_params = array();
+					foreach($_ancestors as $_cid => $_cat)
+					{
+						$cats_params = new JRegistry($_cat->params);
+						$row_clayout = $cats_params->get('clayout', '') ? $cats_params->get('clayout', '') : $row_clayout;
+					}
 				}
 			}
 			
-			foreach($form->_xml['special']->_children as $i => $child) {
-				if ( isset($child->_attributes['enableparam']) && !$cparams->get($child->_attributes['enableparam']) ) {
-					unset($form->_xml['special']->_children[$i]);
-					unset($form->_xml['special']->param[$i]);
-				}
-			}
+			$edit_layout = JText::_('FLEXI_EDIT_LAYOUT_N_GLOBAL_PARAMETERS', true);
+			flexicontent_html::addToolBarButton(
+				'FLEXI_EDIT_LAYOUT_N_GLOBAL_PARAMETERS', $btn_name='edit_layout_params', $full_js="var url = jQuery(this).attr('data-href'); fc_showDialog(url, 'fc_modal_popup_container', 0, 0, 0, 0, {title:'".$edit_layout."'}); return false;", $msg_alert='', $msg_confirm='',
+				$btn_task='', $extra_js='', $btn_list=false, $btn_menu=true, $btn_confirm=false, $btn_class="btn-info".$tip_class, $btn_icon="icon-pencil",
+				'data-placement="bottom" data-href="index.php?option=com_flexicontent&amp;view=template&amp;type=category&amp;tmpl=component&amp;ismodal=1&amp;folder='.$row_clayout.
+				'" title="Edit the display layout of this category. <br/><br/>Note: this layout maybe assigned to other categories, thus changing it will effect them too"'
+			);
 		}
-		
-		
-		// **********************************************************************************
-		// Get Templates and apply Template Parameters values into the form fields structures 
-		// **********************************************************************************
-		
-		$themes		= flexicontent_tmpl::getTemplates();
+
+
+		// **********************************************************************************************************
+		// Get Layouts, load language of current selected template and apply Layout parameters values into the fields
+		// **********************************************************************************************************
+
+		// Load language file of currently selected template
+		$_clayout = $catparams->get('clayout');
+		if ($_clayout) FLEXIUtilities::loadTemplateLanguageFile( $_clayout );
+
+		// Get the category layouts, checking template of current layout for modifications
+		$themes		= flexicontent_tmpl::getTemplates($_clayout);
 		$tmpls		= $themes->category;
-		foreach ($tmpls as $tmpl) {
-			if (FLEXI_J16GE) {
-				$jform = new JForm('com_flexicontent.template.category', array('control' => 'jform', 'load_data' => true));
-				$jform->load($tmpl->params);
-				$tmpl->params = $jform;
-				// ... values applied at the template form file
-			} else {
-				$tmpl->params->loadINI($row->params);
+
+		// Create JForm for the layout and apply Layout parameters values into the fields
+		foreach ($tmpls as $tmpl)
+		{
+			if ($tmpl->name != $_clayout) continue;
+			
+			$jform = new JForm('com_flexicontent.template.category', array('control' => 'jform', 'load_data' => true));
+			$jform->load($tmpl->params);
+			$tmpl->params = $jform;
+			foreach ($tmpl->params->getGroup('attribs') as $field)
+			{
+				$fieldname = $field->fieldname;
+				$value = $catparams->get($fieldname);
+				if (strlen($value)) $tmpl->params->setValue($fieldname, 'attribs', $value);
 			}
 		}
-		
+
 		//build selectlists
 		$Lists = array();
-		
-		if ( !FLEXI_J16GE ) {
-			$javascript = "onchange=\"javascript:if (document.forms[0].image.options[selectedIndex].value!='') {document.imagelib.src='../images/stories/' + document.forms[0].image.options[selectedIndex].value} else {document.imagelib.src='../images/blank.png'}\"";
-			$Lists['imagelist']	= JHTML::_('list.images', 'image', $row->image, $javascript, '/images/stories/' );
-			$Lists['access']		= JHTML::_('list.accesslevel', $row );
-			
-			// build granular access list
-			if (FLEXI_ACCESS) {
-				$Lists['access'] = FAccess::TabGmaccess( $row, 'category', 1, 1, 1, 1, 1, 1, 1, 1, 1 );
-			}
-		}
-		
+
 		$check_published = false;  $check_perms = true;  $actions_allowed=array('core.create');
-		$fieldname = FLEXI_J16GE ? 'jform[parent_id]' : 'parent_id';
+		$fieldname = 'jform[parent_id]';
 		$Lists['parent_id'] = flexicontent_cats::buildcatselect($categories, $fieldname, $row->parent_id, $top=1, 'class="use_select2_lib"',
 			$check_published, $check_perms, $actions_allowed, $require_all=true, $skip_subtrees=array(), $disable_subtrees=array($row->id));
 		
 		$check_published = false;  $check_perms = true;  $actions_allowed=array('core.edit', 'core.edit.own');
-		$fieldname = FLEXI_J16GE ? 'jform[copycid]' : 'copycid';
+		$fieldname = 'jform[copycid]';
 		$Lists['copycid']    = flexicontent_cats::buildcatselect($categories, $fieldname, '', $top=2, 'class="use_select2_lib"', $check_published, $check_perms, $actions_allowed, $require_all=false);
 		
 		$custom_options[''] = 'FLEXI_USE_GLOBAL';
@@ -290,29 +289,79 @@ class FlexicontentViewCategory extends JViewLegacy
 		$custom_options['-1'] = 'FLEXI_PARENT_CAT_MULTI_LEVEL';
 		
 		$check_published = false;  $check_perms = true;  $actions_allowed=array('core.edit', 'core.edit.own');
-		$fieldname = FLEXI_J16GE ? 'jform[special][inheritcid]' : 'params[inheritcid]';
+		$fieldname = 'jform[special][inheritcid]';
 		$Lists['inheritcid'] = flexicontent_cats::buildcatselect($categories, $fieldname, $catparams->get('inheritcid', ''),$top=false, 'class="use_select2_lib"',
 			$check_published, $check_perms, $actions_allowed, $require_all=false, $skip_subtrees=array(), $disable_subtrees=array(), $custom_options);
-		
-		
+
+
 		// ************************
 		// Assign variables to view
 		// ************************
 		
-		$this->assignRef('document'	, $document);
-		$this->assignRef('Lists'		, $Lists);
-		$this->assignRef('row'			, $row);
-		$this->assignRef('form'			, $form);
-		$this->assignRef('perms'		, $perms);
-		$this->assignRef('editor'		, $editor);
-		$this->assignRef('tmpls'		, $tmpls);
-		$this->assignRef('cparams'	, $cparams);
-		if (!FLEXI_J16GE) {
-			$this->assignRef('pane'		, $pane);
-			$this->assignRef('tpane'	, $tpane);
-		}
+		$this->document = $document;
+		$this->Lists    = $Lists;
+		$this->row      = $row;
+		$this->form     = $form;
+		$this->perms    = $perms;
+		$this->editor   = $editor;
+		$this->tmpls    = $tmpls;
+		$this->cparams  = $cparams;
+		$this->iparams  = $iparams;
 
 		parent::display($tpl);
+	}
+	
+	
+	
+	/**
+	 * Method to diplay field showing inherited value
+	 *
+	 * @access	private
+	 * @return	void
+	 * @since	1.5
+	 */
+	function getInheritedFieldDisplay($field, $params)
+	{
+		$_v = $params->get($field->fieldname);
+		
+		if ($_v==='' || $_v===null)
+			return $field->input;
+		else if ($field->getAttribute('type')=='radio' || ($field->getAttribute('type')=='multilist' && $field->getAttribute('subtype')=='radio'))
+		{
+			return str_replace(
+				'value="'.$_v.'"',
+				'value="'.$_v.'" class="fc-inherited-value" ',
+				$field->input);
+		}
+		else if ($field->getAttribute('type')=='fccheckbox' && is_array($_v))
+		{
+			$_input = $field->input;
+			foreach ($_v as $v) {
+				$_input = str_replace(
+					'value="'.$v.'"',
+					'value="'.$v.'" class="fc-inherited-value" ',
+					$_input);
+			}
+			return $_input;
+		}
+		else if ($field->getAttribute('type')=='text')
+		{
+			return str_replace(
+				'<input ',
+				'<input placeholder="'.preg_replace('/[\n\r]/', ' ', $_v).'" ',
+				$field->input);
+		}
+		else if ($field->getAttribute('type')=='textarea')
+		{
+			return str_replace('<textarea ', '<textarea placeholder="'.preg_replace('/[\n\r]/', ' ', $_v).'" ', $field->input);
+		}
+		else if ( method_exists($field, 'setInherited') )
+		{
+			$field->setInherited($_v);
+			return $field->input;
+		}
+		else
+			return $field->input;
 	}
 }
 ?>

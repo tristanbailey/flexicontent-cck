@@ -1,3 +1,9 @@
+	function fc_getCookie(name) {
+	  match = document.cookie.match(new RegExp(name + '=([^;]+)'));
+	  if (match) return match[1];
+	  else return '';
+	}
+	
 	function tableOrdering( order, dir, task )
 	{
 		var form = document.getElementById("adminForm");
@@ -10,50 +16,31 @@
 		adminFormPrepare(form, 2, task);
 	}
 
-	function getSEFurl(loader_el, loader_html, form, url_to_load, autosubmit_msg, autosubmit) {
-
-		var dooptions = {
-			method: 'get',
-			evalScripts: false,
-			onSuccess: function(responseText) {
+	function getSEFurl(loader_el, loader_html, form, url_to_load, autosubmit_msg, autosubmit)
+	{
+		jQuery('#'+loader_el).html(loader_html);
+		jQuery.ajax({
+			type: 'GET',
+			url: url_to_load,
+			dataType: "text",
+			data: {
+			},
+			success: function( responseText )
+			{
 			 	form.action=responseText;
 			 	var fcform = jQuery(form);
 			 	fcform.attr('data-fcform_action', responseText);
 			 	if (autosubmit) {
-			 		$(loader_el).innerHTML += autosubmit_msg;
+			 		jQuery('#'+loader_el).append(autosubmit_msg);
 					adminFormPrepare(form, 2);
 				} else {
-					$(loader_el).innerHTML = '';
+					jQuery('#'+loader_el).html('');
 				}
-			} 
-		};
-		if(typeof options!="undefined") {
-			dooptions = options;
-		}
-		
-		if (MooTools.version>='1.2.4') {
-			$(loader_el).set('html', loader_html);
-			new Request({
-				url: url_to_load,
-				method: 'get',
-				evalScripts: false,
-				onSuccess: function(responseText) {
-				 	form.action=responseText;
-				 	var fcform = jQuery(form);
-				 	fcform.attr('data-fcform_action', responseText);
-				 	if (autosubmit) {
-				 		$(loader_el).innerHTML += autosubmit_msg;
-						adminFormPrepare(form, 2);
-					} else {
-						$(loader_el).innerHTML = '';
-					}
-				} 
-			}).send();
-		} else {
-			$(loader_el).setHTML(loader_html);
-			var ajax = new Ajax(url_to_load, dooptions);
-			ajax.request.delay(300, ajax);
-		}
+			},
+			error: function (xhr, ajaxOptions, thrownError) {
+				alert('Error status: ' + xhr.status + ' , Error text: ' + thrownError);
+			}
+		});
 	}
 	
 	
@@ -69,8 +56,8 @@
 		
 		var var_sep = fcform_action.match(/\?/) ? '&' : '?';
 		
-		for(i=0; i<form.elements.length; i++) {
-			
+		for(i=0; i<form.elements.length; i++)
+		{
 			var element = form.elements[i];
 			if (typeof element.name === "undefined" || element.name === null || !element.name) continue;
 			
@@ -78,14 +65,28 @@
 			if (element.name=='filter_order' && element.value=='i.title') continue;
 			if (element.name=='filter_order_Dir' && element.value=='ASC') continue;
 			
-			var matches = element.name.match(/(filter[.]*|cids|letter|clayout|limit|orderby|searchword|searchphrase|areas|contenttypes|txtflds|ordering)/);
+			var matches = element.name.match(/^(filter.*|cids|letter|clayout|limit|orderby|orderby_2nd|listall|q|searchword|p|searchphrase|areas\[\]|contenttypes\[\]|txtflds|o|ordering)$/);
 			if (!matches || element.value == '') continue;
-			if ((element.type=='radio' || element.type=='checkbox') && !element.checked) continue;
+
+			if ( (element.type=='radio' || element.type=='checkbox') ) {
+				if ( !element.checked ) continue;
+				if ( jQuery(element).attr('data-is-default-value') == '1' )
+				{
+					if (postprep==2) jQuery(element).attr('disabled', 'disabled');
+					continue;
+				}
+			}
+			if ( element.type=='select-one' ) {
+				if ( jQuery(element).find('option:selected').attr('data-is-default-value') ) {
+					if (postprep==2) jQuery(element).attr('disabled', 'disabled');
+					continue;
+				}
+			}
 			
 			if ( element.type=='select-multiple' ) {
 				for (var p=0; p < element.length; p++) {
 					if ( ! element.options[p].selected ) continue;
-					extra_action += var_sep + element.name.replace("[]","") + '[' + p + ']=' + element.options[p].value;
+					extra_action += var_sep + element.name.replace("[]","") + '[' + ']=' + encodeURIComponent(element.options[p].value);
 					var_sep = '&';
 				}
 			} else {
@@ -96,9 +97,14 @@
 					if (postprep==2) element.value = date.print(frmt, true);
 					element_value = date.print(frmt, true);
 				}
-				extra_action += var_sep + element.name + '=' + element_value;
+				extra_action += var_sep + element.name + '=' + encodeURIComponent(element_value);
 				var_sep = '&';
 			}
+		}
+		
+		var fc_uid = fc_getCookie('fc_uid');
+		if (fc_uid!='') {
+			extra_action += var_sep + 'cc' + '=' +fc_uid;
 		}
 		form.action = fcform_action + extra_action;  //alert(form.action);
 		
@@ -120,13 +126,18 @@
 	function adminFormClearFilters (form) {
 		for(i=0; i<form.elements.length; i++) {
 			var element = form.elements[i];
+			if (typeof element.name === "undefined" || element.name === null || !element.name) continue;
 			
 			if (element.name=='filter_order') {	element.value=='i.title'; continue; }
 			if (element.name=='filter_order_Dir') { element.value=='ASC'; continue; }
 			
 			var matches = element.name.match(/(filter[.]*|letter)/);
 			if (matches) {
-				element.value = '';
+				if (jQuery(element).data('select2')) {
+					jQuery(element).select2('val', '');
+				} else {
+					element.value = '';
+				}
 			}
 		}
 	}
@@ -279,28 +290,25 @@ jQuery(document).ready(function() {
 		}
 	});
 	
-	/* handle calender fields being changed by popup calendar, focus/blur is cross-browser compatible ... to detect input field being changed */
-	/* up to J2.5 */
-	jQuery('img.calendar').bind('click', function() {
+	// handle calender fields being changed by popup calendar
+	jQuery('input + button .icon-calendar').parent().bind('click', function() {
 		var el = jQuery(this).prev();
-		el.prev().hide();
 		el.attr('data-previous_value', el.val());
-		el.css("opacity", "1");
-		el.focus();
+		Calendar.prototype.__currentCalendarInput = el;   // Set a singular variable for the current input field
+		//el.focus(); // Effectivle sets: document.activeElement so that close handler of calendar 'callCloseHandler' will find it
 	});
-	/* up to J3.0+ */
-	jQuery('button i.icon-calendar').parent().bind('click', function() {
-		var el = jQuery(this).prev();
-		el.prev().hide();
-		el.attr('data-previous_value', el.val());
-		el.css("opacity", "1");
-		el.focus();
-	});
-	if (typeof Calendar !== "undefined" && typeof Calendar.prototype.callCloseHandler === 'function') {
+	
+	if (typeof Calendar !== "undefined" && typeof Calendar.prototype.callCloseHandler === 'function')
+	{
 		var oldFunc = Calendar.prototype.callCloseHandler;
-		Calendar.prototype.callCloseHandler = function() {
+		Calendar.prototype.callCloseHandler = function()
+		{
 			var oldFuncResult = oldFunc.apply(this, arguments);
-			document.activeElement.blur();
+			var el = Calendar.prototype.__currentCalendarInput; //jQuery(document.activeElement);
+			var previous_value = el.attr('data-previous_value');
+			if ( typeof previous_value !== "undefined" && previous_value != el.val())  {
+				el.trigger('change');
+			}
 			return oldFuncResult;
 		}
 	}
@@ -308,52 +316,60 @@ jQuery(document).ready(function() {
 	var fc_select_pageSize = 10;
 	
 	// add Simple text search autocomplete
-	if (typeof jQuery.fn.autocomplete==='function') {
-		jQuery( "input.fc_index_complete_simple" ).autocomplete({
-			source: function( request, response ) {
-				el = jQuery(this.element);
-				jQuery.ajax({
-					url: "index.php?option=com_flexicontent&tmpl=component",
-					dataType: "json",
-					data: {
-						type: (el.hasClass('fc_adv_complete') ? "adv_index" : "basic_index"),
-						task: "txtautocomplete",
-						pageSize: fc_select_pageSize,
-						text: request.term,
-						cid: parseInt(_FC_GET['cid']),
-						cids: _FC_GET['cids'],
-						filter_13: _FC_GET['filter_13']
-					},
-					success: function( data ) {
-						//console.log( '... done' );
-						response( jQuery.map( data.Matches, function( item ) {
-							return {
-								/*label: item.item_id +': '+ item.text,*/
-								label: item.text,
-								value: item.text
-							}
-						}));
-					}
-				});
-			},
-			delay: 200,
-			minLength: 1,
-			select: function( event, ui ) {
-				//console.log( ui.item  ?  "Selected: " + ui.item.label  :  "Nothing selected, input was " + this.value);
-				var ele = event.target;
-				jQuery(ele).trigger('change');
-			},
-			open: function() {
-				jQuery( this ).removeClass( "ui-corner-all" ).addClass( "ui-corner-top" );
-				jQuery(this).removeClass('working');
-			},
-			close: function() {
-				jQuery( this ).removeClass( "ui-corner-top" ).addClass( "ui-corner-all" );
-			},
-			search: function() {
-				//console.log( 'quering ... ' );
-				jQuery(this).addClass('working');
-			}
+	if (typeof jQuery.ui != 'undefined' && typeof jQuery.ui.autocomplete==='function') {
+		var theElements = jQuery("input.fc_index_complete_simple");
+		theElements.each(function () {
+			jQuery.ui.autocomplete( {
+				source: function( request, response ) {
+					var el = jQuery(this.element);
+					var el_cid  = el.attr('data-txt_ac_cid')  ? el.attr('data-txt_ac_cid')  : (parseInt(_FC_GET['cid']) || 0);
+					var el_cids = el.attr('data-txt_ac_cids') ? el.attr('data-txt_ac_cids') : _FC_GET['cids'];
+					var el_usesubs = parseInt(el.attr('data-txt_ac_usesubs')) || 0;
+					jQuery.ajax({
+						url: (jbase_url_fc + "index.php?option=com_flexicontent&format=raw"),
+						dataType: "json",
+						data: {
+							type: (el.hasClass('fc_adv_complete') ? "adv_index" : "basic_index"),
+							task: "txtautocomplete",
+							pageSize: fc_select_pageSize,
+							text: request.term,
+							lang: (typeof _FC_GET !="undefined" && 'lang' in _FC_GET ? _FC_GET['lang']: ''),
+							cid: el_cid,
+							cids: el_cids,
+							usesubs: el_usesubs
+						},
+						success: function( data ) {
+							//console.log( '... done' );
+							response( jQuery.map( data.Matches, function( item ) {
+								return {
+									/*label: item.item_id +': '+ item.text,*/
+									label: item.text,
+									value: item.text
+								}
+							}));
+						}
+					});
+				},
+				delay: 200,
+				minLength: 1,
+				select: function( event, ui ) {
+					//console.log( ui.item  ?  "Selected: " + ui.item.label  :  "Nothing selected, input was " + this.value);
+					var ele = event.target;
+					jQuery(ele).val(ui.item.value); // set value before triggering change
+					jQuery(ele).trigger('change');
+				},
+				open: function() {
+					jQuery( this ).removeClass( "ui-corner-all" ).addClass( "ui-corner-top" );
+					jQuery(this).removeClass('working');
+				},
+				close: function() {
+					jQuery( this ).removeClass( "ui-corner-top" ).addClass( "ui-corner-all" );
+				},
+				search: function() {
+					//console.log( 'quering ... ' );
+					jQuery(this).addClass('working');
+				}
+			}, this );
 		});
 	}
 
@@ -379,7 +395,7 @@ jQuery(document).ready(function() {
 		
 			ajax: {
 				quietMillis: 200,
-				url: "index.php?option=com_flexicontent&tmpl=component",
+				url: (jbase_url_fc + "index.php?option=com_flexicontent&format=raw"),
 				dataType: 'json',
 				//Our search term and what page we are on
 				data: function (term, page) {
@@ -389,9 +405,10 @@ jQuery(document).ready(function() {
 						text: term,
 						pageSize: fc_select_pageSize,
 						pageNum: page,
-						cid: parseInt(_FC_GET['cid']),
-						cids: _FC_GET['cids'],
-						filter_13: _FC_GET['filter_13']
+						lang: (typeof _FC_GET !="undefined" && 'lang' in _FC_GET ? _FC_GET['lang']: ''),
+						cid:  (jQuery(this).attr('data-txt_ac_cid')  ? jQuery(this).attr('data-txt_ac_cid')  : (parseInt(_FC_GET['cid']) || 0)),
+						cids: (jQuery(this).attr('data-txt_ac_cids') ? jQuery(this).attr('data-txt_ac_cids') : _FC_GET['cids']),
+						usesubs: (parseInt(jQuery(this).attr('data-txt_ac_usesubs')) || 0)
 					};
 				},
 				results: function (data, page) {
@@ -405,23 +422,23 @@ jQuery(document).ready(function() {
 	}
 	
 	jQuery('body').prepend(
-	 	"<span id='fc_filter_form_blocker'>" +
-	    "<span class='fc_blocker_opacity'></span>" +
-	    "<span class='fc_blocker_content'>" +
+	 	'<span id="fc_filter_form_blocker">' +
+	    '<span class="fc_blocker_opacity"></span>' +
+	    '<span class="fc_blocker_content">' +
 	    	Joomla.JText._('FLEXI_APPLYING_FILTERING') +
-	    	"<div class='fc_blocker_bar'><div></div></div>" +
-	    "</span>" +
-	  "</span>");
+	    	'<div class="fc_blocker_bar"><div></div></div>' +
+	    '</span>' +
+	  '</span>');
 		
 		fc_recalculateWindow();
 });
 
 
-/* recalculate window width/height and widow scrollbars */
+// recalculate window width/height and window scrollbars
 function fc_recalculateWindow()
 {
 	// Set these to hidden to force scrollbar recalculation when we set to auto	
-	document.documentElement.style.overflow = "hidden";
+	/*document.documentElement.style.overflow = "hidden";
 	document.body.style.overflow = "hidden";
 	
 	// make sure widht & height is automatic
@@ -430,13 +447,36 @@ function fc_recalculateWindow()
 	document.body.style.height = "auto";
 	document.body.style.width  = "auto";
 	
-	//document.body.scroll = "no";  // old ie versions ??
 	setTimeout(function() {
-		document.documentElement.style.overflow = "auto";  // firefox, chrome, ie11+
-		//document.body.style.overflow = "auto";
-		//document.body.scroll = "yes";  // old ie versions ??
-	}, 100);
+		document.documentElement.style.overflow = "";  // firefox, chrome, ie11+
+		document.body.style.overflow = "";
+	}, 100);*/
 	
-	/* reset popup overlay containers ... TODO add more ? */
+	// reset popup overlay containers ... TODO add more ?
 	jQuery('#OverlayContainer').css("height", jQuery('body').css('height'));
 }
+
+
+function fc_replaceUrlParam(url, paramName, paramValue)
+{
+	var pattern = new RegExp('('+paramName+'=).*?(&|$)');
+	return (url.search(pattern)>=0) ?
+		url.replace(pattern,'$1' + paramValue + '$2') :
+		url + (url.indexOf('?')>0 ? '&' : '?') + paramName + '=' + paramValue;
+}
+
+
+
+jQuery(document).ready(function () {
+	
+	var cc = (typeof _FC_GET !="undefined" && 'cc' in _FC_GET ? _FC_GET['cc']: '');
+	var fc_uid = fc_getCookie('fc_uid');
+	
+	if (cc!='' && fc_uid!=cc)
+	{
+		var staleUrl = window.location.href;
+		newUrl = fc_replaceUrlParam(staleUrl, 'cc', fc_uid);
+		window.location.replace(newUrl);
+		document.body.innerHTML = Joomla.JText._('FLEXI_UPDATING_CONTENTS') + ' <img id="loading_img" src="components/com_flexicontent/assets/images/ajax-loader.gif">';
+	}
+});

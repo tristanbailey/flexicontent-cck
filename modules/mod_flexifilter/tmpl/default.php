@@ -19,6 +19,23 @@ $text_search_val = JRequest::getString('filter', '', 'default');
 
 // 4. Create (print) the form
 ?>
+
+<div class="fcfilter_form_outer fcfilter_form_module">
+
+<?php
+// FORM in slider
+$ff_placement = $params->get('ff_placement', 0);
+
+if ($ff_placement){
+	$ff_slider_id = 
+		($module->id     ? '_'.$module->id : '')
+		;
+	$ff_toggle_search_title = JText::_($params->get('ff_toggle_search_title', 'FLEXI_TOGGLE_SEARCH_FORM'));
+	echo JHtml::_('sliders.start', 'fcfilter_form_slider'.$ff_slider_id, array('useCookie'=>1, 'show'=>-1, 'display'=>-1, 'startOffset'=>-1, 'startTransition'=>1));
+	echo JHtml::_('sliders.panel', $ff_toggle_search_title, 'fcfilter_form_togglebtn'.$ff_slider_id);
+}
+?>
+
 <form id='<?php echo $form_id; ?>' action='<?php echo $form_target; ?>' data-fcform_default_action='<?php echo $default_target; ?>' method='<?php echo $form_method; ?>' >
 
 <?php if ( !empty($cats_select_field) ) : ?>
@@ -36,5 +53,12 @@ $text_search_val = JRequest::getString('filter', '', 'default');
 <?php include(JPATH_SITE.'/components/com_flexicontent/tmpl_common/filters.php'); ?>
 
 </form>
+
+<?php
+// FORM in slider
+if ($ff_placement) echo JHtml::_('sliders.end');
+?>
+
+</div>
 
 </div> <!-- mod_flexifilter_wrap -->

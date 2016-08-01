@@ -18,7 +18,7 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * View class for the FLEXIcontent type screen
@@ -38,28 +38,29 @@ class FlexicontentViewType extends JViewLegacy
 		$user     = JFactory::getUser();
 		
 		//add css to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
 		
-		//add js function to overload the joomla submitform
-		FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
-		JHTML::_('behavior.tooltip');
-		$document->addScript(JURI::root().'components/com_flexicontent/assets/js/admin.js');
-		$document->addScript(JURI::root().'components/com_flexicontent/assets/js/validate.js');
+		// Add JS frameworks
+		flexicontent_html::loadFramework('select2');
+		flexicontent_html::loadFramework('flexi-lib-form');
 		
-		//Load pane behavior
-		jimport('joomla.html.pane');
-
+		// Add js function to overload the joomla submitform validation
+		JHTML::_('behavior.formvalidation');  // load default validation JS to make sure it is overriden
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/admin.js', FLEXI_VHASH);
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/validate.js', FLEXI_VHASH);
+		
 		//Get data from the model
 		$model  = $this->getModel();
-		$row		= $this->get( FLEXI_J16GE ? 'Item' : 'Type' );
-		if (FLEXI_J16GE) {
-			$form = $this->get('Form');
-		}
-		$themes		= flexicontent_tmpl::getTemplates();
-		$tmpls		= $themes->items;
+		$row    = $this->get( FLEXI_J16GE ? 'Item' : 'Type' );
+		$form   = $this->get('Form');
+		
+		// Get type parameters
+		$tparams = new JRegistry($row->attribs);
+		
+		// Get item layouts
+		$themes = flexicontent_tmpl::getTemplates();
+		$tmpls  = $themes->items;
 		
 		//create the toolbar
 		if ( $row->id ) {
@@ -82,69 +83,35 @@ class FlexicontentViewType extends JViewLegacy
 			}
 		}
 		
-		if (FLEXI_ACCESS) {
-			$itemscreatable[] = JHTML::_('select.option',  0, JText::_( 'FLEXI_ANY_AUTHOR' ) );
-			$itemscreatable[] = JHTML::_('select.option',  1, JText::_( 'FLEXI_USE_ACL_TO_HIDE' ) );
-			$itemscreatable[] = JHTML::_('select.option',  2, JText::_( 'FLEXI_USE_ACL_TO_DISABLE' ) );
-			$itemscreatable_fieldname = FLEXI_J16GE ? 'jform[itemscreatable]' : 'itemscreatable';
-			$lists['itemscreatable'] = JHTML::_('select.genericlist',   $itemscreatable, $itemscreatable_fieldname, '', 'value', 'text', $row->itemscreatable );
-		}
+		// Load language file of currently selected template
+		$_ilayout = @ $row->attribs['ilayout'];
+		if ($_ilayout) FLEXIUtilities::loadTemplateLanguageFile( $_ilayout );
 		
-		//build access level list
-		if (!FLEXI_J16GE) {
-			if (FLEXI_ACCESS) {
-				$lang = JFactory::getLanguage();
-				$lang->_strings['FLEXIACCESS_PADD'] = 'Create Items';
-				$lists['access']	= FAccess::TabGmaccess( $row, 'type', 1, 1, 0, 0, 0, 0, 0, 0, 0 );
-			} else {
-				$lists['access'] 	= JHTML::_('list.accesslevel', $row );
-			}
-		}
-		
-		if (!FLEXI_J16GE) {
-			//clean data
-			JFilterOutput::objectHTMLSafe( $row, ENT_QUOTES );
+		// Create JForm for the layout and apply Layout parameters values into the fields
+		foreach ($tmpls as $tmpl)
+		{
+			if ($tmpl->name != $_ilayout) continue;
 			
-			//create the parameter form
-			$form = new JParameter($row->attribs, JPATH_COMPONENT.DS.'models'.DS.'type.xml');
-			//$form->loadINI($row->attribs);
-			
-			//echo "<pre>"; print_r($form->_xml['themes']->_children[0]);  echo "<pre>"; print_r($form->_xml['themes']->param[0]); exit;
-			foreach($form->_xml['themes']->_children as $i => $child) {
-				if ( isset($child->_attributes['enableparam']) && !$cparams->get($child->_attributes['enableparam']) ) {
-					unset($form->_xml['themes']->_children[$i]);
-					unset($form->_xml['themes']->param[$i]);
-				}
-			}
-		}
-		
-		// Apply Template Parameters values into the form fields structures 
-		foreach ($tmpls as $tmpl) {
-			if (FLEXI_J16GE) {
-				$jform = new JForm('com_flexicontent.template.item', array('control' => 'jform', 'load_data' => true));
-				$jform->load($tmpl->params);
-				$tmpl->params = $jform;
-				// ... values applied at the template form file
-			} else {
-				$tmpl->params->loadINI($row->attribs);
+			$jform = new JForm('com_flexicontent.template.item', array('control' => 'jform', 'load_data' => true));
+			$jform->load($tmpl->params);
+			$tmpl->params = $jform;
+			foreach ($tmpl->params->getGroup('attribs') as $field)
+			{
+				$fieldname = $field->fieldname;
+				$value = $tparams->get($fieldname);
+				if (strlen($value)) $tmpl->params->setValue($fieldname, 'attribs', $value);
 			}
 		}		
 		
+		// assign permissions
+		$permission = FlexicontentHelperPerm::getPerm();
+		$this->assignRef('permission'  , $permission);
+		
 		//assign data to template
-		// assign permissions for J2.5
-		if (FLEXI_J16GE) {
-			$permission = FlexicontentHelperPerm::getPerm();
-			$this->assignRef('permission'  , $permission);
-		}
 		$this->assignRef('document'   , $document);
 		$this->assignRef('row'        , $row);
 		$this->assignRef('form'       , $form);
 		$this->assignRef('tmpls'      , $tmpls);
-		if (!FLEXI_J16GE) {
-			$pane = JPane::getInstance('sliders');
-			$this->assignRef('pane'     , $pane);
-			$this->assignRef('lists'    , $lists);
-		}
 		
 		parent::display($tpl);
 	}

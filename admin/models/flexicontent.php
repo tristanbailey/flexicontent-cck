@@ -19,10 +19,9 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.model');
-if (FLEXI_J16GE) {
-	jimport('joomla.access.rules');
-}
+jimport('legacy.model.legacy');
+jimport('joomla.access.rules');
+use Joomla\String\StringHelper;
 
 /**
  * FLEXIcontent Component Model
@@ -49,14 +48,14 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	 * @access public
 	 * @return array
 	 */
-	function getPending()
+	function getPending(&$total=null)
 	{
 		$user = JFactory::getUser();
 		$permission = FlexicontentHelperPerm::getPerm();
 		$allitems	= $permission->DisplayAllItems;
 		
 		$use_tmp = true;
-		$query_select_ids = 'SELECT c.id'; //SQL_CALC_FOUND_ROWS
+		$query_select_ids = 'SELECT SQL_CALC_FOUND_ROWS c.id';
 		$query_select_data = 'SELECT c.id, c.title, c.catid, c.created, cr.name as creator, c.created_by, c.modified, c.modified_by, mr.name as modifier';
 		
 		$query_from_join = ''
@@ -73,13 +72,20 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		
 		$query = $query_select_ids . $query_from_join . $query_where_orderby_having;
 		$this->_db->SetQuery($query, 0, 5);
-		$ids = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+		$ids = $this->_db->loadColumn();
+		
+		// Get total
+		$this->_db->setQuery("SELECT FOUND_ROWS()");
+		$total = $this->_db->loadResult();
 		
 		$genstats = array();
 		if ( !empty($ids) ) {
 			$query = $query_select_data . $query_from_join . ' WHERE c.id IN ('.implode(',',$ids).')';
 			$this->_db->SetQuery($query, 0, 5);
-			$genstats = $this->_db->loadObjectList();
+			$_data = $this->_db->loadObjectList('id');
+			
+			foreach($ids as $id) $genstats[] = $_data[$id];
+			unset($_data);
 		}
 		return $genstats;
 	}
@@ -90,15 +96,16 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	 * @access public
 	 * @return array
 	 */
-	function getRevised()
+	function getRevised(&$total=null)
 	{
 		$user = JFactory::getUser();
 		$permission = FlexicontentHelperPerm::getPerm();
 		$allitems	= $permission->DisplayAllItems;
 		
 		$use_tmp = true;
-		$query_select_ids = 'SELECT c.id'.', c.version, MAX(fv.version_id)'; //SQL_CALC_FOUND_ROWS
-		$query_select_data = 'SELECT c.id, c.title, c.catid, c.created, cr.name as creator, c.created_by, c.modified, c.modified_by, mr.name as modifier'.', c.version, MAX(fv.version_id)';
+		$query_select_ids = 'SELECT SQL_CALC_FOUND_ROWS c.id'.', c.version, MAX(fv.version_id)';
+		$query_select_data = 'SELECT c.id, c.title, c.catid, c.created, cr.name as creator, c.created_by, c.modified, c.modified_by, mr.name as modifier'
+			.', c.version, MAX(fv.version_id)';
 		
 		$query_from_join = ''
 				. ' FROM '.($use_tmp ? '#__flexicontent_items_tmp' : '#__content').' as c'
@@ -117,13 +124,21 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		
 		$query = $query_select_ids . $query_from_join . $query_where_orderby_having;
 		$this->_db->SetQuery($query, 0, 5);
-		$ids = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+		$ids = $this->_db->loadColumn();
+		
+		// Get total
+		$this->_db->setQuery("SELECT FOUND_ROWS()");
+		$total = $this->_db->loadResult();
 		
 		$genstats = array();
 		if ( !empty($ids) ) {
-			$query = $query_select_data . $query_from_join . ' WHERE c.id IN ('.implode(',',$ids).')';
+			$query = $query_select_data . $query_from_join . ' WHERE c.id IN ('.implode(',',$ids).')'
+				.' GROUP BY fv.item_id ';
 			$this->_db->SetQuery($query, 0, 5);
-			$genstats = $this->_db->loadObjectList();
+			$_data = $this->_db->loadObjectList('id');
+			
+			foreach($ids as $id) $genstats[] = $_data[$id];
+			unset($_data);
 		}
 		return $genstats;
 	}
@@ -134,7 +149,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	 * @access public
 	 * @return array
 	 */
-	function getDraft()
+	function getDraft(&$total=null)
 	{
 		$user = JFactory::getUser();
 		$permission = FlexicontentHelperPerm::getPerm();
@@ -142,7 +157,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		$requestApproval = @ $permission->RequestApproval;
 		
 		$use_tmp = true;
-		$query_select_ids = 'SELECT c.id'; //SQL_CALC_FOUND_ROWS
+		$query_select_ids = 'SELECT SQL_CALC_FOUND_ROWS c.id';
 		$query_select_data = 'SELECT c.id, c.title, c.catid, c.created, cr.name as creator, c.created_by, c.modified, c.modified_by, mr.name as modifier';
 		
 		$query_from_join = ''
@@ -159,13 +174,20 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		
 		$query = $query_select_ids . $query_from_join . $query_where_orderby_having;
 		$this->_db->SetQuery($query, 0, 5);
-		$ids = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+		$ids = $this->_db->loadColumn();
+		
+		// Get total
+		$this->_db->setQuery("SELECT FOUND_ROWS()");
+		$total = $this->_db->loadResult();
 		
 		$genstats = array();
 		if ( !empty($ids) ) {
 			$query = $query_select_data . $query_from_join . ' WHERE c.id IN ('.implode(',',$ids).')';
 			$this->_db->SetQuery($query, 0, 5);
-			$genstats = $this->_db->loadObjectList();
+			$_data = $this->_db->loadObjectList('id');
+			
+			foreach($ids as $id) $genstats[] = $_data[$id];
+			unset($_data);
 		}
 		return $genstats;
 	}
@@ -176,14 +198,14 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	 * @access public
 	 * @return array
 	 */
-	function getInprogress()
+	function getInprogress(&$total=null)
 	{
 		$user = JFactory::getUser();
 		$permission = FlexicontentHelperPerm::getPerm();
 		$allitems	= $permission->DisplayAllItems;
 		
 		$use_tmp = true;
-		$query_select_ids = 'SELECT c.id'; //SQL_CALC_FOUND_ROWS
+		$query_select_ids = 'SELECT SQL_CALC_FOUND_ROWS c.id';
 		$query_select_data = 'SELECT c.id, c.title, c.catid, c.created, cr.name as creator, c.created_by, c.modified, c.modified_by, mr.name as modifier';
 		
 		$query_from_join = ''
@@ -200,13 +222,20 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		
 		$query = $query_select_ids . $query_from_join . $query_where_orderby_having;
 		$this->_db->SetQuery($query, 0, 5);
-		$ids = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+		$ids = $this->_db->loadColumn();
+		
+		// Get total
+		$this->_db->setQuery("SELECT FOUND_ROWS()");
+		$total = $this->_db->loadResult();
 		
 		$genstats = array();
 		if ( !empty($ids) ) {
 			$query = $query_select_data . $query_from_join . ' WHERE c.id IN ('.implode(',',$ids).')';
 			$this->_db->SetQuery($query, 0, 5);
-			$genstats = $this->_db->loadObjectList();
+			$_data = $this->_db->loadObjectList('id');
+			
+			foreach($ids as $id) $genstats[] = $_data[$id];
+			unset($_data);
 		}
 		return $genstats;
 	}
@@ -260,7 +289,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		if ( FLEXI_J16GE && $menu->language=='' ) {
 			$query 	=	"UPDATE #__menu SET `language`='*' WHERE id=". (int)$default_menu_itemid;
 			$this->_db->setQuery($query);
-			$result = $this->_db->query();
+			$result = $this->_db->execute();
 		}
 		
 		// All checks passed
@@ -392,7 +421,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		// Make sure basic CORE fields are published
 		$q = 'UPDATE #__flexicontent_fields SET published=1 WHERE id > 0 AND id < 7';
 		$this->_db->setQuery( $q );
-		$this->_db->query();
+		$this->_db->execute();
 		
 		$tbl   = FLEXI_J16GE ? '#__extensions' : '#__plugins';
 		$idcol = FLEXI_J16GE ? 'extension_id' : 'id';
@@ -426,15 +455,10 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		if ($return !== NULL) return $return;
 		$return = false;
 		
-		if (FLEXI_J16GE) {
-			$columns = $this->_db->getTableColumns('#__flexicontent_items_ext');
-			$result_lang_col = array_key_exists('language', $columns) ? true : false;
-			$result_tgrp_col = array_key_exists('lang_parent_id', $columns) ? true : false;
-		} else {
-			$fields = $this->_db->getTableFields('#__flexicontent_items_ext');
-			$result_lang_col = array_key_exists('language', $fields['#__flexicontent_items_ext']) ? true : false;
-			$result_tgrp_col = array_key_exists('lang_parent_id', $fields['#__flexicontent_items_ext']) ? true : false;
-		}
+		$columns = $this->_db->getTableColumns('#__flexicontent_items_ext');
+		$result_lang_col = array_key_exists('language', $columns) ? true : false;
+		$result_tgrp_col = array_key_exists('lang_parent_id', $columns) ? true : false;
+		
 		$return = $result_lang_col && $result_tgrp_col;
 		
 		return $return;
@@ -477,6 +501,69 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	
 	
 	/**
+	 * Method to fix collations
+	 * 
+	 */
+	function checkCollations()
+	{
+		$session = JFactory::getSession();
+		$app = JFactory::getApplication();
+		$db = JFactory::getDBO();
+		$dbprefix = $app->getCfg('dbprefix');
+		$dbname   = $app->getCfg('db');
+		
+		jimport('cms.version.version');
+		$jversion = new JVersion;
+		
+		$collation_version = $session->get('flexicontent.collation_version');
+		if ($collation_version == $jversion->getShortVersion())  return;
+		
+		$docheck = version_compare( $jversion->getShortVersion(), '3.4.99', 'g' );
+		if ($docheck)
+		{
+			$full_tbl_name = $dbprefix . 'content';
+			$query = "SELECT COLUMN_NAME, CHARACTER_SET_NAME, COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '".$dbname."' AND TABLE_NAME = '".$full_tbl_name."' AND COLUMN_NAME IN ('language')";
+			$db->setQuery($query);
+			$col_data = $db->loadAssocList('COLUMN_NAME');
+			$jchset = $col_data['language']['CHARACTER_SET_NAME'];   // ? 'utf8mb4'
+			$jcname = $col_data['language']['COLLATION_NAME'];   // ? 'utf8mb4_unicode_ci'
+			
+			// Data Types of columns
+			$tbl_names_arr = array(
+				'flexicontent_items_ext'=>array(
+					'language' => "VARCHAR(7) CHARACTER SET ".$jchset." COLLATE ".$jcname." NOT NULL DEFAULT '*'"
+				),
+				'flexicontent_items_tmp'=>array(
+					'title' => "VARCHAR(255) CHARACTER SET ".$jchset." COLLATE ".$jcname." NOT NULL",
+					'alias' => "VARCHAR(400) CHARACTER SET ".$jchset." COLLATE ".$jcname." NOT NULL",
+					'language' => "VARCHAR(7) CHARACTER SET ".$jchset." COLLATE ".$jcname." NOT NULL DEFAULT '*'"
+				),
+				'flexicontent_fields'=>array(
+					'field_type' => "VARCHAR(50) CHARACTER SET ".$jchset." COLLATE ".$jcname." NOT NULL default ''"
+				)
+			);
+			
+			foreach ($tbl_names_arr as $tbl_name => $tbl_cols)
+			{
+				$full_tbl_name = $dbprefix . $tbl_name;
+				$query = "SELECT COLUMN_NAME, CHARACTER_SET_NAME, COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '".$dbname."' AND TABLE_NAME = '".$full_tbl_name."' AND COLUMN_NAME IN ('".implode("','", array_keys($tbl_cols))."')";
+				$db->setQuery($query);
+				$col_data = $db->loadAssocList('COLUMN_NAME');
+				foreach($col_data as $col => $data) {
+					if ($data['CHARACTER_SET_NAME'] <> $jchset || $data['COLLATION_NAME'] <> $jcname) {
+						$query = "ALTER TABLE ".$full_tbl_name." MODIFY `".$col."` ". $tbl_cols[$col];
+						$db->setQuery($query);
+						$col_data = $db->execute();
+					}
+				}
+			}
+		}
+		
+		$session->set('flexicontent.collation_version', $jversion->getShortVersion());
+	}
+	
+	
+	/**
 	 * Method to get if language of items is initialized properly
 	 * 
 	 * @access	public
@@ -490,21 +577,38 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		$return = false;
 		
 		$cparams = JComponentHelper::getParams( 'com_flexicontent' );
-		$enable_translation_groups = $cparams->get("enable_translation_groups") && ( FLEXI_J16GE || FLEXI_FISH );
+		//$useAssocs = flexicontent_db::useAssociations();
 		
+		// Check for emtpy language in flexicontent EXT table
 		$query = "SELECT COUNT(*)"
 			." FROM #__flexicontent_items_ext as ie"
-			." WHERE ie.language='' " . ($enable_translation_groups ? " OR (ie.lang_parent_id=0 AND ie.item_id<>0) " : "")
+			." WHERE ie.language='' "
 			." LIMIT 1";
 		$this->_db->setQuery($query);
 		$cnt = $this->_db->loadResult();
 		if ($cnt) return $return = true;
 		
-		if (!FLEXI_J16GE) return $return;
+		$query = "SELECT COUNT(*)"  // Check for emtpy language in Joomla content EXT table
+			." FROM #__content as i"
+			." WHERE i.language=''"
+			." LIMIT 1";
+		$this->_db->setQuery($query);
+		$cnt = $this->_db->loadResult();
+		if ($cnt) return $return = true;
 		
 		$query = "SELECT COUNT(*)"
 			." FROM #__content as i"
-			." WHERE i.language=''"
+			." JOIN #__flexicontent_items_ext as ie ON i.id=ie.item_id "
+			." WHERE i.language<>ie.language"
+			." LIMIT 1";
+		$this->_db->setQuery($query);
+		$cnt = $this->_db->loadResult();
+		if ($cnt) return $return = true;
+		
+		// Check for not yet transfered language associations
+		$query = "SELECT COUNT(*)"
+			." FROM #__flexicontent_items_ext as ie"
+			." WHERE ie.lang_parent_id <> 0"
 			." LIMIT 1";
 		$this->_db->setQuery($query);
 		$cnt = $this->_db->loadResult();
@@ -527,11 +631,24 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		if ($return !== NULL) return $return;
 		$return = false;
 		
+		// Clear orphan data from the EXTENDED data tables
+		$query = "DELETE d.* FROM #__flexicontent_items_tmp AS d"
+			." LEFT JOIN #__content AS c ON d.id = c.id"
+			." WHERE c.id IS NULL";
+		$this->_db->setQuery($query);
+		$this->_db->execute();
+		
+		// Clear orphan data from the TMP data tables
+		$query = "DELETE d.* FROM #__flexicontent_items_ext AS d"
+			." LEFT JOIN #__content AS c ON d.item_id = c.id"
+			." WHERE c.id IS NULL";
+		$this->_db->setQuery($query);
+		$this->_db->execute();
+
 		// Find columns cached
 		$cache_tbl = "#__flexicontent_items_tmp";
 		$tbls = array($cache_tbl);
-		if (!FLEXI_J16GE) $tbl_fields = $this->_db->getTableFields($tbls);
-		else foreach ($tbls as $tbl) $tbl_fields[$tbl] = $this->_db->getTableColumns($tbl);
+		foreach ($tbls as $tbl) $tbl_fields[$tbl] = $this->_db->getTableColumns($tbl);
 		
 		// Get the column names
 		$tbl_fields = array_keys($tbl_fields[$cache_tbl]);
@@ -548,9 +665,9 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			." WHERE 1 " . (!FLEXI_J16GE ? ' AND i.sectionid = ' . (int)FLEXI_SECTION : '')
 			;
 		foreach ($tbl_fields as $col_name) {
-			if ($col_name == "id")
+			if ($col_name == "id" || $col_name == "hits")
 				continue;
-			else if ( (!FLEXI_J16GE && $col_name=='language') || $col_name=='type_id' || $col_name=='lang_parent_id')
+			else if ( $col_name=='type_id' || $col_name=='lang_parent_id')
 				$query .= " AND ie.`".$col_name."`=ca.`".$col_name."`";
 			else
 				$query .= " AND i.`".$col_name."`=ca.`".$col_name."`";
@@ -615,23 +732,54 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		jimport('joomla.filesystem.file');
 		$app = JFactory::getApplication();
 		$dbprefix = $app->getCfg('dbprefix');
-		$dbname = $app->getCfg('db');
+		$dbname   = $app->getCfg('db');
 		
 		$tblname_indexnames = array(
+			'flexicontent_tags'=>array('name'=>0),
 			'flexicontent_items_ext'=>array('lang_parent_id'=>0, 'type_id'=>0),
-			'flexicontent_items_tmp'=>array('state'=>0, 'catid'=>0, 'created_by'=>0, 'access'=>0, 'featured'=>0, 'language'=>0, 'type_id'=>0, 'lang_parent_id'=>0),
-			'flexicontent_fields_item_relations'=>array('value'=>32),
+			'flexicontent_items_tmp'=>array('alias'=>0, 'state'=>0, 'catid'=>0, 'created_by'=>0, 'access'=>0, 'featured'=>0, 'language'=>0, 'type_id'=>0, 'lang_parent_id'=>0),
+			'flexicontent_fields_item_relations'=>array(
+				'value'=>32,
+				'PRIMARY'=>array(
+					'custom_drop'=>'DROP PRIMARY KEY',
+					'custom_add'=>'ADD PRIMARY KEY',
+					'cols'=>array('field_id'=>0, 'item_id'=>0, 'valueorder'=>0, 'suborder'=>0)
+				)
+			),
+			'flexicontent_items_versions'=>array(
+				'value'=>32,
+				'PRIMARY'=>array(
+					'custom_drop'=>'DROP PRIMARY KEY',
+					'custom_add'=>'ADD PRIMARY KEY',
+					'cols'=>array('version'=>0, 'field_id'=>0, 'item_id'=>0, 'valueorder'=>0, 'suborder'=>0)
+				)
+			),
 			'flexicontent_download_history'=>array('user_id'=>0, 'file_id'=>0),
-			'flexicontent_download_coupons'=>array('user_id'=>0, 'file_id'=>0, 'token'=>0, 'expire_on'=>0)
+			'flexicontent_download_coupons'=>array('user_id'=>0, 'file_id'=>0, 'token'=>0, 'expire_on'=>0),
+			'flexicontent_templates'=>array(
+				'PRIMARY'=>array(
+					'custom_drop'=>'DROP PRIMARY KEY',
+					'custom_add'=>'ADD PRIMARY KEY',
+					'cols'=>array('template'=>0, 'cfgname'=>0, 'layout'=>0, 'position'=>0)
+				)
+			),
+			'flexicontent_favourites'=>array(
+				'PRIMARY'=>array(
+					'custom_drop'=>'DROP PRIMARY KEY',
+					'custom_add'=>'ADD PRIMARY KEY',
+					'cols'=>array('id'=>0,'itemid'=>0, 'userid'=>0, 'type'=>0)
+				)
+			)
 		);
-		if (!FLEXI_J16GE) unset($tblname_indexnames['flexicontent_items_tmp']['featured']);
 		
 		$missing = array();
 		$all_started = true;
-		foreach($tblname_indexnames as $tblname => $indexnames) {
+		foreach($tblname_indexnames as $tblname => $indexnames)
+		{
 			$indexing_started = false;
 			$file = JPATH_SITE.DS.'tmp'.DS.'tbl_indexes_'.$tblname;
-			if ( JFile::exists($file) ) {
+			if ( JFile::exists($file) )
+			{
 				$indexing_start_secs = (int)JFile::read($file);
 				$indexing_started = $indexing_start_secs + 3600 > time();
 				if (!$indexing_started) {
@@ -639,10 +787,16 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				}
 			}
 			
-			foreach($indexnames as $indexname => $size) {
-				$query = "SELECT COUNT(1) IndexIsThere "
+			foreach($indexnames as $indexname => $iconf)
+			{
+				$query = "SELECT COUNT(1) AS IndexIsThere "
 					." FROM INFORMATION_SCHEMA.STATISTICS"
-					." WHERE table_schema='".$dbname."' AND table_name='".$dbprefix.$tblname."' AND index_name='".$indexname."'";
+					." WHERE TABLE_SCHEMA = '".$dbname."' AND TABLE_NAME = '".$dbprefix.$tblname."' AND index_name='".$indexname."'"
+					.(is_array($iconf) && !empty($iconf['cols'])  ? 
+						" AND COLUMN_NAME IN ('".implode("','", array_keys($iconf['cols']))."')".
+						" HAVING IndexIsThere = ".count($iconf['cols'])
+					: "");
+				//if (is_array($iconf) && !empty($iconf['cols'])) echo $query ."<br/>";
 				$this->_db->setQuery($query);
 				$exists = $this->_db->loadResult();
 				if ($indexing_started) {
@@ -653,7 +807,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 					else $missing[$tblname]['__indexing_started__'] = 1;
 				} else if (!$exists) {
 					$all_started = false;
-					$missing[$tblname][$indexname] = $size;
+					$missing[$tblname][$indexname] = $iconf;
 				}
 			}
 		}
@@ -698,26 +852,33 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	function getCacheThumbChmod()
 	{
 		static $return;
-		if ($return === null) {
-			jimport('joomla.filesystem.folder');
-			jimport('joomla.filesystem.jpath');
-			
-			$phpthumbcache 	= JPath::clean(JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'librairies'.DS.'phpthumb'.DS.'cache');
-			
-			// CHECK phpThumb cache exists and create the folder
-			if ( !JFolder::exists($phpthumbcache) && !JFolder::create($phpthumbcache) ) {
-				JError::raiseWarning(100, 'Error: Unable to create phpThumb folder: '. $phpthumbcache .' image thumbnail will not work properly' );
-				return true;  // Cancel task !! to allow user to continue
-			}
-			
-			// CHECK phpThumb cache permissions
-			$return = preg_match('/rwxr.xr.x/i', JPath::getPermissions($phpthumbcache) ) ? true : false;
-			// If permissions not good check if we can change them
-			if ( !$return && !JPath::canChmod($phpthumbcache) ) {
-				JError::raiseWarning(100, 'Error: Unable to change phpThumb folder permissions: '. $phpthumbcache .' there maybe a wrong owner of the folder. Correct permissions are important for proper thumbnails and for -security-' );
-				return true;  // Cancel task !! to allow user to continue
-			}
+		if ($return!==null) return $return;
+		
+		jimport('joomla.filesystem.folder');
+		jimport('joomla.filesystem.path');
+		
+		$phpthumbcache 	= JPath::clean(JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'librairies'.DS.'phpthumb'.DS.'cache');
+		
+		// CHECK phpThumb cache exists and create the folder
+		if ( !JFolder::exists($phpthumbcache) && !JFolder::create($phpthumbcache) ) {
+			JError::raiseWarning(100, 'Error: Unable to create phpThumb folder: '. $phpthumbcache .' image thumbnail will not work properly' );
+			$return = true;  // Cancel task !! to allow user to continue
+			return;
 		}
+		
+		// CHECK phpThumb cache permissions
+		$perms = JPath::getPermissions($phpthumbcache);
+		$return = preg_match('/rwx....../i', $perms) ? true : false;  //'/rwxr.xr.x/i'
+		if ( $return && preg_match('/....w..w./i', $perms) ) {
+			JPath::setPermissions($phpthumbcache, '0600', '0700');
+		}
+		// If permissions not good check if we can change them
+		if ( !$return && !JPath::canChmod($phpthumbcache) ) {
+			JError::raiseWarning(100, 'Error: Unable to change phpThumb folder permissions: '. $phpthumbcache .' there maybe a wrong owner of the folder. Correct permissions are important for proper thumbnails and for -security-' );
+			$return = true;  // Cancel task !! to allow user to continue
+			return;
+		}
+		
 		return $return;
 	}
 
@@ -727,9 +888,13 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	 * @access public
 	 * @return	boolean	True on success
 	 */
-	function getOldBetaFiles() {
+	function getDeprecatedFiles(&$deprecated=null)
+	{
+		$deprecated = array();
+		return true;  // Do not execute
+		
 		static $return;
-		if ($return!==null) return $return;
+		if ($return===true) return $return;
 		
 		jimport('joomla.filesystem.folder');
 		$files 	= array (
@@ -741,19 +906,34 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			'mcats.php',
 			'default.xml',
 			'default.php',
-			'index.html',
-			'form.php',
-			'form.xml'
+			'tags.xml',
+			'tags.php',
+			'favs.xml',
+			'favs.php',
+			'index.html'
 			);
 		$catdir 	= JPath::clean(JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'views'.DS.'category'.DS.'tmpl');
 		$cattmpl 	= JFolder::files($catdir);		
 		$ctmpl 		= array_diff($cattmpl,$files);
+		foreach ($ctmpl as $c) {
+			$deprecated[$catdir][] = $c;
+		}
 		
+		$files 	= array (
+			'default.xml',
+			'default.php',
+			'form.php',
+			'form.xml',
+			'index.html'
+			);
 		$itemdir 	= JPath::clean(JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'views'.DS.FLEXI_ITEMVIEW.DS.'tmpl');
-		$itemtmpl 	= JFolder::files($itemdir);		
+		$itemtmpl	= JFolder::files($itemdir);		
 		$itmpl 		= array_diff($itemtmpl,$files);
+		foreach ($itmpl as $c) {
+			$deprecated[$itemdir][] = $c;
+		}
 		
-		$return = ($ctmpl || $itmpl) ? false : true;
+		$return = count($deprecated) ? false : true;
 		return $return;
 	}
 
@@ -764,8 +944,12 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	 * @access public
 	 * @return	boolean	True on success
 	 */
-	function getFieldsPositions()
+	function convertOldFieldsPositions()
 	{
+		static $return;
+		if ($return!==null) return $return;
+		$return = true;  // only call once
+		
 		$query 	= "SELECT name, positions"
 				. " FROM #__flexicontent_fields"
 				. " WHERE positions <> ''"
@@ -773,80 +957,84 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		$this->_db->setQuery( $query );
 		$fields = $this->_db->loadObjectList();
 		
-		if ($fields) {
-			// create a temporary table to store the positions
-			$this->_db->setQuery( "DROP TABLE IF EXISTS #__flexicontent_positions_tmp" );
-			$this->_db->query();
-			$query = "
-					CREATE TABLE #__flexicontent_positions_tmp (
-					  `field` varchar(100) NOT NULL default '',
-					  `view` varchar(30) NOT NULL default '',
-					  `folder` varchar(100) NOT NULL default '',
-					  `position` varchar(255) NOT NULL default ''
-					) ENGINE=MyISAM DEFAULT CHARSET=utf8
-					";
-			$this->_db->setQuery( $query );
-			$this->_db->query();
+		if (empty($fields)) return $return;
+		
+		// create a temporary table to store the positions
+		$this->_db->setQuery( "DROP TABLE IF EXISTS #__flexicontent_positions_tmp" );
+		$this->_db->execute();
+		$query = "
+				CREATE TABLE #__flexicontent_positions_tmp (
+				  `field` varchar(100) NOT NULL default '',
+				  `view` varchar(30) NOT NULL default '',
+				  `folder` varchar(100) NOT NULL default '',
+				  `position` varchar(255) NOT NULL default ''
+				) ENGINE=MyISAM DEFAULT CHARSET=utf8
+				";
+		$this->_db->setQuery( $query );
+		$this->_db->execute();
 
-			foreach ($fields as $field) {			
-				$field->positions = explode("\n", $field->positions);	
-				foreach ($field->positions as $pos) {
-					$pos = explode('.', $pos);
-					$query = 'INSERT INTO #__flexicontent_positions_tmp (`field`, `view`, `folder`, `position`) VALUES(' . $this->_db->Quote($field->name) . ',' . $this->_db->Quote($pos[1]) . ',' . $this->_db->Quote($pos[2]) . ',' . $this->_db->Quote($pos[0]) . ')';
-					$this->_db->setQuery($query);
-					$this->_db->query();
-				}
+		foreach ($fields as $field) {			
+			$field->positions = explode("\n", $field->positions);	
+			foreach ($field->positions as $pos) {
+				$pos = explode('.', $pos);
+				$query = 'INSERT INTO #__flexicontent_positions_tmp (`field`, `view`, `folder`, `position`) VALUES(' . $this->_db->Quote($field->name) . ',' . $this->_db->Quote($pos[1]) . ',' . $this->_db->Quote($pos[2]) . ',' . $this->_db->Quote($pos[0]) . ')';
+				$this->_db->setQuery($query);
+				$this->_db->execute();
 			}
+		}
 
-			$templates	= flexicontent_tmpl::getTemplates();
-			$folders 	= flexicontent_tmpl::getThemes();
-			$views		= array('items', 'category');
-			
-			foreach ($folders as $folder) {
-				foreach ($views as $view) {
-					$groups = @$templates->{$view}->{$folder}->positions;
-					if ($groups) {
-						foreach ($groups as $group) {
-							$query 	= 'SELECT field'
-									. ' FROM #__flexicontent_positions_tmp'
-									. ' WHERE view = ' . $this->_db->Quote($view)
-									. ' AND folder = ' . $this->_db->Quote($folder)
-									. ' AND position = ' . $this->_db->Quote($group)
-									;
-							$this->_db->setQuery( $query );
-							$fieldstopos = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
-							
-							if ($fieldstopos) {
-								$field = implode(',', $fieldstopos);
+		$tmpls   = flexicontent_tmpl::getTemplates();
+		$folders = flexicontent_tmpl::getThemes();
+		$views   = array('items', 'category');
+		
+		foreach ($folders as $folder) {
+			foreach ($views as $view) {
+				$groups = @ $tmpls->{$view}->{$folder}->positions;
+				if ($groups) {
+					foreach ($groups as $group) {
+						$query 	= 'SELECT field'
+								. ' FROM #__flexicontent_positions_tmp'
+								. ' WHERE view = ' . $this->_db->Quote($view)
+								. ' AND folder = ' . $this->_db->Quote($folder)
+								. ' AND position = ' . $this->_db->Quote($group)
+								;
+						$this->_db->setQuery( $query );
+						$fieldstopos = $this->_db->loadColumn();
+						
+						if ($fieldstopos) {
+							$field = implode(',', $fieldstopos);
 
-								$query = 'INSERT INTO #__flexicontent_templates (`template`, `layout`, `position`, `fields`) VALUES(' . $this->_db->Quote($folder) . ',' . $this->_db->Quote($view) . ',' . $this->_db->Quote($group) . ',' . $this->_db->Quote($field) . ')';
-								$this->_db->setQuery($query);
-								$this->_db->query();
-							}
+							$query = 'INSERT INTO #__flexicontent_templates (`template`, `layout`, `position`, `fields`) VALUES(' . $this->_db->Quote($folder) . ',' . $this->_db->Quote($view) . ',' . $this->_db->Quote($group) . ',' . $this->_db->Quote($field) . ')';
+							$this->_db->setQuery($query);
+							// By catching SQL error (e.g. layout configuration of template already exists),
+							// we will allow execution to continue, thus clearing "positions" column in fields table
+							try { $this->_db->execute(); } catch (Exception $e) { }
+							if ($this->_db->getErrorNum()) echo $this->_db->getErrorMsg();
 						}
 					}
-				}				
-			}
-			
-			// delete the temporary table
-			$query = 'DROP TABLE #__flexicontent_positions_tmp';
-			$this->_db->setQuery( $query );
-			$this->_db->query();
-			
-			// delete the old positions
-			$query 	= "UPDATE #__flexicontent_fields SET positions = ''";
-			$this->_db->setQuery( $query );
-			$this->_db->query();
-			
-			// alter ordering field for releases prior to beta5
-			$query 	= "ALTER TABLE #__flexicontent_cats_item_relations MODIFY `ordering` int(11) NOT NULL default '0'";
-			$this->_db->setQuery( $query );
-			$this->_db->query();
-			$query 	= "ALTER TABLE #__flexicontent_fields_type_relations MODIFY `ordering` int(11) NOT NULL default '0'";
-			$this->_db->setQuery( $query );
-			$this->_db->query();
+				}
+			}				
 		}
-		return $fields;
+		
+		// delete the temporary table
+		$query = 'DROP TABLE #__flexicontent_positions_tmp';
+		$this->_db->setQuery( $query );
+		$this->_db->execute();
+		
+		// delete the old positions
+		$query 	= "UPDATE #__flexicontent_fields SET positions = ''";
+		$this->_db->setQuery( $query );
+		$this->_db->execute();
+		
+		// alter ordering field for releases prior to beta5
+		$query 	= "ALTER TABLE #__flexicontent_cats_item_relations MODIFY `ordering` int(11) NOT NULL default '0'";
+		$this->_db->setQuery( $query );
+		$this->_db->execute();
+		$query 	= "ALTER TABLE #__flexicontent_fields_type_relations MODIFY `ordering` int(11) NOT NULL default '0'";
+		$this->_db->setQuery( $query );
+		$this->_db->execute();
+		
+		return $return;
 	}
 
 
@@ -925,7 +1113,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 						. ' WHERE '. (FLEXI_J16GE ? 'extension_id' : 'id') .'='. $flexi->id
 						;
 				$this->_db->setQuery($query);
-				$this->_db->query();
+				$this->_db->execute();
 				return true;
 			}
 		}
@@ -957,95 +1145,6 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			return true;
 		}
 		return false;
-	}
-
-	/**
-	 * Method to check and add some extra FLEXIcontent specific ACL rules
-	 *
-	 * @access public
-	 * @return	boolean	True on success
-	 */
-	function checkExtraAclRules()
-	{
-		if (FLEXI_ACCESS)
-		{
-			$db = $this->_db;
-			
-			// COMMENTED out, instead we will use field's 'submit' privilege
-			/*$query = "SELECT count(*) FROM `#__flexiaccess_rules` WHERE acosection='com_flexicontent' AND aco='editvalue' AND axosection='fields'";
-			$db->setQuery($query);
-			$editvalue_rule = $db->loadResult();
-			
-			if (!$editvalue_rule)
-			{
-				$query = "INSERT INTO #__flexiaccess_rules (`acosection`, `variable`, `aco`, `axosection`, `axo`, `label`, `source`, `ordering`)"
-					." VALUES ('com_flexicontent', '', 'editvalue', 'fields', '', 'Edit Field Values', '', '')";
-				$db->setQuery($query);
-				$db->query();
-				JFactory::getApplication()->enqueueMessage( 'Added ACL Rule: '. JText::_('FLEXI_EDIT_FIELD_VALUE'), 'message' );
-			}*/
-			
-			// Delete wrong rule names
-			$query = "DELETE FROM #__flexiaccess_rules WHERE acosection='com_flexicontent' AND aco='associateanyitem'";
-			$db->setQuery($query);
-			$db->query();
-			
-			// Check for assocanytrans : Allow users to associate translations (items) authored by any user
-			$query = "SELECT COUNT(*) FROM `#__flexiaccess_rules` WHERE acosection='com_flexicontent' AND aco='assocanytrans'";
-			$db->setQuery($query);
-			$assocanytrans_rule = $db->loadResult();
-			
-			if (!$assocanytrans_rule)
-			{
-				$query = "INSERT INTO #__flexiaccess_rules (`acosection`, `variable`, `aco`, `axosection`, `axo`, `label`, `source`, `ordering`)"
-					." VALUES ('com_flexicontent', '', 'assocanytrans', '', '', 'Associate any translation (items)', '', '')";
-				$db->setQuery($query);
-				$db->query();
-				JFactory::getApplication()->enqueueMessage( 'Added ACL Rule: '. JText::_('FLEXI_ASSOCIATE_ANY_TRANSLATION'), 'message' );
-			}
-			
-			// Check for editcreationdate : Allow users to edit creation date of an item
-			/*$query = "SELECT COUNT(*) FROM `#__flexiaccess_rules` WHERE acosection='com_flexicontent' AND aco='editcreationdate'";
-			$db->setQuery($query);
-			$editcreationdate_rule = $db->loadResult();
-			
-			if (!$editcreationdate_rule)
-			{
-				$query = "INSERT INTO #__flexiaccess_rules (`acosection`, `variable`, `aco`, `axosection`, `axo`, `label`, `source`, `ordering`)"
-					." VALUES ('com_flexicontent', '', 'editcreationdate', '', '', 'Edit creation date (items)', '', '')";
-				$db->setQuery($query);
-				$db->query();
-				JFactory::getApplication()->enqueueMessage( 'Added ACL Rule: '. JText::_('FLEXI_EDIT_CREATION_DATE'), 'message' );
-			}*/
-			
-			// Check for ignoreviewstate : Allow users to view unpublished, archived, trashed, scheduled, expired items in frontend content lists e.g. category view
-			$query = "SELECT COUNT(*) FROM `#__flexiaccess_rules` WHERE acosection='com_flexicontent' AND aco='ignoreviewstate'";
-			$db->setQuery($query);
-			$ignoreviewstate_rule = $db->loadResult();
-			
-			if (!$ignoreviewstate_rule)
-			{
-				$query = "INSERT INTO #__flexiaccess_rules (`acosection`, `variable`, `aco`, `axosection`, `axo`, `label`, `source`, `ordering`)"
-					." VALUES ('com_flexicontent', '', 'ignoreviewstate', '', '', 'Ignore view state (items)', '', '')";
-				$db->setQuery($query);
-				$db->query();
-				JFactory::getApplication()->enqueueMessage( 'Added ACL Rule: '. JText::_('FLEXI_IGNORE_VIEW_STATE'), 'message' );
-			}
-			
-			// Check for import : Allow management of (Content) Import
-			$query = "SELECT COUNT(*) FROM `#__flexiaccess_rules` WHERE acosection='com_flexicontent' AND aco='import'";
-			$db->setQuery($query);
-			$import_rule = $db->loadResult();
-			
-			if (!$import_rule)
-			{
-				$query = "INSERT INTO #__flexiaccess_rules (`acosection`, `variable`, `aco`, `axosection`, `axo`, `label`, `source`, `ordering`)"
-					." VALUES ('com_flexicontent', '', 'import', '', '', 'Manage (Content) Import', '', '')";
-				$db->setQuery($query);
-				$db->query();
-				JFactory::getApplication()->enqueueMessage( 'Added ACL Rule: '. JText::_('FLEXI_MANAGE_CONTENT_IMPORT'), 'message' );
-			}
-		}
 	}
 	
 	
@@ -1130,7 +1229,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				$row = & $rows[$item_id];
 				
 				// Get field values of the current item version
-				$query = "SELECT f.id,fir.value,f.field_type,f.name,fir.valueorder,f.iscore "
+				$query = "SELECT f.id,fir.value,f.field_type,f.name,fir.valueorder,fir.suborder,f.iscore "
 						." FROM #__flexicontent_fields_item_relations as fir"
 					//." LEFT JOIN #__flexicontent_items_versions as iv ON iv.field_id="
 						." LEFT JOIN #__flexicontent_fields as f on f.id=fir.field_id "
@@ -1142,7 +1241,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				if ($clean_database && $fieldsvals) {
 					$query = 'DELETE FROM #__flexicontent_fields_item_relations WHERE item_id = '.$row->id;
 					$db->setQuery($query);
-					$db->query();
+					$db->execute();
 				}
 				
 				// Delete any existing versioned field values to avoid conflicts, this maybe redudant, since they should not exist,
@@ -1150,17 +1249,18 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				// NOTE: we do not delete data with field_id negative as these exist only in the versioning table
 				$query = 'DELETE FROM #__flexicontent_items_versions WHERE item_id = '.$row->id .' AND version= '.$row->version.' AND field_id > 0';
 				$db->setQuery($query);
-				$db->query();
+				$db->execute();
 				
 				// Add the 'maintext' field to the fields array for adding to versioning table
 				$f = new stdClass();
 				$f->id					= 1;
 				$f->iscore			= 1;
 				$f->valueorder	= 1;
+				$f->suborder		= 1;
 				$f->field_type	= "maintext";
 				$f->name				= "text";
 				$f->value				= $row->introtext;
-				if ( JString::strlen($row->fulltext) > 1 ) {
+				if ( StringHelper::strlen($row->fulltext) > 1 ) {
 					$f->value .= '<hr id="system-readmore" />' . $row->fulltext;
 				}
 				if(substr($f->value, 0, 3)!="<p>") {
@@ -1171,17 +1271,18 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				// Add the 'categories' field to the fields array for adding to versioning table
 				$query = "SELECT catid FROM #__flexicontent_cats_item_relations WHERE itemid='".$row->id."';";
 				$db->setQuery($query);
-				$categories = FLEXI_J16GE ? $db->loadColumn() : $db->loadResultArray();
+				$categories = $db->loadColumn();
 				if(!$categories || !count($categories)) {
 					$categories = array($catid = $row->catid);
 					$query = "INSERT INTO #__flexicontent_cats_item_relations VALUES('$catid','".$row->id."', '0');";
 					$db->setQuery($query);
-					$db->query();
+					$db->execute();
 				}
 				$f = new stdClass();
 				$f->id 					= 13;
 				$f->iscore			= 1;
 				$f->valueorder	= 1;
+				$f->suborder		= 1;
 				$f->version		= (int)$row->version;
 				$f->value		= serialize($categories);
 				if ($add_cats) $fieldsvals[] = $f;
@@ -1189,11 +1290,12 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				// Add the 'tags' field to the fields array for adding to versioning table
 				$query = "SELECT tid FROM #__flexicontent_tags_item_relations WHERE itemid='".$row->id."';";
 				$db->setQuery($query);
-				$tags = FLEXI_J16GE ? $db->loadColumn() : $db->loadResultArray();
+				$tags = $db->loadColumn();
 				$f = new stdClass();
 				$f->id 					= 14;
 				$f->iscore			= 1;
 				$f->valueorder	= 1;
+				$f->suborder		= 1;
 				$f->version		= (int)$row->version;
 				$f->value		= serialize($tags);
 				if ($add_tags) $fieldsvals[] = $f;
@@ -1205,9 +1307,10 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 					$obj->field_id   = $fieldval->id;
 					$obj->item_id    = $row->id;
 					$obj->valueorder = $fieldval->valueorder;
+					$obj->suborder   = $fieldval->suborder;
 					$obj->version    = (int)$row->version;
 					$obj->value      = $fieldval->value;
-					//echo "version: ".$obj->version.",fieldid : ".$obj->field_id.",value : ".$obj->value.",valueorder : ".$obj->valueorder."<br />";
+					//echo "version: ".$obj->version.",fieldid : ".$obj->field_id.",value : ".$obj->value.",valueorder : ".$obj->valueorder.",suborder : ".$obj->suborder."<br />";
 					//echo "inserting into __flexicontent_items_versions<br />";
 					$db->insertObject('#__flexicontent_items_versions', $obj);
 					if( $clean_database && !$fieldval->iscore ) { // If clean_database is on we need to re-add the deleted values
@@ -1265,16 +1368,18 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			;
 		if ( count($cases) ) {
 			$db->setQuery($query);
-			$db->query();
+			$db->execute();
 			if ($db->getErrorNum()) echo $db->getErrorMsg();
 		}
 		
 		/*$map = array(
+			'account_via_submit'=>'FLEXIcontent - User account via submit',
+			'authoritems'=>'FLEXIcontent - Author Items (More items by this Author)',
 			'addressint'=>'FLEXIcontent - Address International / Google Maps',
 			'checkbox'=>'FLEXIcontent - Checkbox',
 			'checkboximage'=>'FLEXIcontent - Checkbox Image',
 			'core'=>'FLEXIcontent - Core Fields (Joomla article properties)',
-			'date'=>'FLEXIcontent - Date / Publish Up-Down Dates',
+			'date'=>'FLEXIcontent - Date / Timestamp / Publish Up-Down Dates',
 			'email'=>'FLEXIcontent - Email',
 			'extendedweblink'=>'FLEXIcontent - Extended Weblink',
 			'fcloadmodule'=>'FLEXIcontent - Load Module / Module position',
@@ -1291,8 +1396,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			'relation_reverse'=>'FLEXIcontent - Relation - Reverse',
 			'select'=>'FLEXIcontent - Select',
 			'selectmultiple'=>'FLEXIcontent - Select Multiple',
-			'sharedaudio'=>'FLEXIcontent - Shared Audio (youtube,vimeo,dailymotion,etc)',
-			'sharedvideo'=>'FLEXIcontent - Shared Video (youtube,vimeo,dailymotion,etc)',
+			'sharedmedia'=>'FLEXIcontent - Shared Video/Audio (Youtube,etc / SoundCloud,Last.fm,etc)',
 			'text'=>'FLEXIcontent - Text (number/time/etc/custom validation)',
 			'textarea'=>'FLEXIcontent - Textarea',
 			'textselect'=>'FLEXIcontent - TextSelect (Text with existing value selection)',
@@ -1317,7 +1421,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			;
 		if ( count($cases) ) {
 			$db->setQuery($query);
-			$db->query();
+			$db->execute();
 			if ($db->getErrorNum()) echo $db->getErrorMsg();
 		}*/
 	}
@@ -1325,7 +1429,6 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	function processLanguageFiles($code = 'en-GB', $method = '', $params = array())
 	{
 		jimport('joomla.filesystem.file');
-		jimport('joomla.filesystem.archive');
 		
 		$prefix 	= $code . '.';
 		$suffix 	= '.ini';
@@ -1362,8 +1465,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			'plg_flexicontent_fields_relation_reverse',
 			'plg_flexicontent_fields_select',
 			'plg_flexicontent_fields_selectmultiple',
-			'plg_flexicontent_fields_shareaudio',
-			'plg_flexicontent_fields_sharevideo',
+			'plg_flexicontent_fields_sharemedia',
 			'plg_flexicontent_fields_text',
 			'plg_flexicontent_fields_textarea',
 			'plg_flexicontent_fields_textselect',
@@ -1472,23 +1574,21 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			
 			// Create the archive
 			echo JText::_('FLEXI_SEND_LANGUAGE_CREATING_ARCHIVE')."<br>";
-			if (!FLEXI_J16GE) {
-				JArchive::create($archivename, $fileslist, 'gz', '', $targetfolder);
-			} else {
-				$app = JFactory::getApplication('administrator');
-				$files = array();
-				foreach ($fileslist as $i => $filename) {
-					$files[$i]=array();
-					$files[$i]['name'] = preg_replace("%^(\\\|/)%", "", str_replace($targetfolder, "", $filename) );  // STRIP PATH for filename inside zip
-					$files[$i]['data'] = implode('', file($filename));   // READ contents into string, here we use full path
-					$files[$i]['time'] = time();
-				}
-				
-				$packager = JArchive::getAdapter('zip');
-				if (!$packager->create($archivename, $files)) {
-					echo JText::_('FLEXI_OPERATION_FAILED');
-					return false;
-				}
+			
+			$app = JFactory::getApplication('administrator');
+			$files = array();
+			foreach ($fileslist as $i => $filename) {
+				$files[$i]=array();
+				$files[$i]['name'] = preg_replace("%^(\\\|/)%", "", str_replace($targetfolder, "", $filename) );  // STRIP PATH for filename inside zip
+				$files[$i]['data'] = implode('', file($filename));   // READ contents into string, here we use full path
+				$files[$i]['time'] = time();
+			}
+			
+			jimport('joomla.archive.archive');
+			$packager = JArchive::getAdapter('zip');
+			if (!$packager->create($archivename, $files)) {
+				echo JText::_('FLEXI_OPERATION_FAILED');
+				return false;
 			}
 			
 			// Remove temporary folder structure
@@ -1505,39 +1605,52 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	}
 
 	
-	function checkInitialPermission() {
+	function checkInitialPermission()
+	{
 		$debug_initial_perms = JComponentHelper::getParams('com_flexicontent')->get('debug_initial_perms');
 		
 		static $init_required = null;
 		if ( $init_required !== null ) return $init_required;
 		
-		$db = JFactory::getDBO();
+		$db = $this->_db;
 		$component_name = 'com_flexicontent';
-		
+
+
 		// DELETE old namespace (flexicontent.*) permissions of v2.0beta, we do not try to rename them ... instead we will use com_content (for some of them),
 		$query = $db->getQuery(true)->delete('#__assets')->where('name LIKE ' . $db->quote('flexicontent.%'));
 		$db->setQuery($query);
 		
-		try { $db->query(); } catch (Exception $e) { }
+		try { $db->execute(); } catch (Exception $e) { }
 		if ($db->getErrorNum()) echo $db->getErrorMsg();
+
+		// DELETE bad top-level assets, only root.1 should exist
+		$query = $db->getQuery(true)->delete('#__assets')->where('(parent_id=0 OR level=0) AND name<>' . $db->quote('root.1'));
+		$db->setQuery($query);
 		
+		try { $db->execute(); } catch (Exception $e) { }
+		if ($db->getErrorNum()) echo $db->getErrorMsg();
+
+
 		// SET Access View Level to public (=1) for fields that do not have their Level set
 		$query = $db->getQuery(true)->update('#__flexicontent_fields')->set('access = 1')->where('access = 0');
 		$db->setQuery($query);
 		
-		try { $db->query(); } catch (Exception $e) { }
+		try { $db->execute(); } catch (Exception $e) { }
 		if ($db->getErrorNum()) echo $db->getErrorMsg();
 		
 		// SET Access View Level to public (=1) for types that do not have their Level set
 		$query = $db->getQuery(true)->update('#__flexicontent_types')->set('access = 1')->where('access = 0');
 		$db->setQuery($query);
 		
-		try { $db->query(); } catch (Exception $e) { }
+		try { $db->execute(); } catch (Exception $e) { }
 		if ($db->getErrorNum()) echo $db->getErrorMsg();
 		
 		// CHECK that we have the same Component Actions in assets DB table with the Actions as in component's access.xml file
 		$asset	= JTable::getInstance('asset');
-		if ($comp_section = $asset->loadByName($component_name)) {  // Try to load component asset, if missing it returns false
+		if ($comp_section = $asset->loadByName($component_name))    // Try to load component asset, if missing it returns false
+		{
+			$this->verifyExtraRules();  // Verify that com_content component asset has the extra FC specific rules
+			
 			// ok, component asset not missing, proceed to cross check for deleted / added actions
 			$rules = new JAccessRules($asset->rules);
 			$rules_data = $rules->getData();
@@ -1556,11 +1669,16 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		if ($debug_initial_perms) { echo "Component DB Rule Count " . ( ($comp_section) ? count($rules->getData()) : 0 ) . "<br />"; }
 		if ($debug_initial_perms) { echo "Component File Rule Count " . count(JAccess::getActions('com_flexicontent', 'component')) . "<br />"; }
 		
-		// CHECK if some categories don't have permissions set, , !!! WARNING this query must be same like the one USED in function initialPermission()
+		// Get a list com_content TOP-LEVEL categories that have wrong asset names (do not point to 'com_content' asset)
+		// (NOTE: we do not longer force category asset creation if asset is not set, so we will not check them here)
+		// !!! WARNING this query must be same like the one USED in function initialPermission()
+		$com_content_asset	= JTable::getInstance('asset');
+		$com_content_asset->loadByName('com_content');
 		$query = $db->getQuery(true)
 			->select('c.id')
 			->from('#__assets AS se')->join('RIGHT', '#__categories AS c ON se.id=c.asset_id AND se.name=concat("com_content.category.",c.id)')
-			->where( '(se.id is NULL OR (c.parent_id=1 AND se.parent_id!='.(int)$asset->id.') )' )
+			->where( '(c.parent_id=1 AND se.parent_id!='.(int)$com_content_asset->id.')' )
+			//->where( '(se.id is NULL OR (c.parent_id=1 AND se.parent_id!='.(int)$com_content_asset->id.') )' )
 			->where( 'c.extension = ' . $db->quote('com_content') );
 		
 		$db->setQuery($query);
@@ -1570,16 +1688,6 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		
 		if (!empty($result) && $debug_initial_perms) { echo "bad assets for categories: "; print_r($result); echo "<br>"; }
 		$category_section = count($result) == 0 ? 1 : 0;
-
-		// CHECK if some items don't have permissions set, , !!! WARNING this query must be same like the one USED in function initialPermission()
-		/*$query = $db->getQuery(true)
-			->select('c.id')
-			->from('#__assets AS se')->join('RIGHT', '#__content AS c ON se.id=c.asset_id AND se.name=concat("com_content.article.",c.id)')
-			->where('se.id is NULL');
-		$db->setQuery($query);
-		$result = $db->loadObjectList();					if ($db->getErrorNum()) echo $db->getErrorMsg();
-		if (count($result) && $debug_initial_perms) { echo "bad assets for items: "; print_r($result); echo "<br>"; }*/
-		$article_section = 1; //count($result) == 0 ? 1 : 0;
 
 		// CHECK if some fields don't have permissions set, !!! WARNING this query must be same like the one USED in function initialPermission()
 		$query = $db->getQuery(true)
@@ -1607,22 +1715,29 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		if (!empty($result) && $debug_initial_perms) { echo "bad assets for types: "; print_r($result); echo "<br>"; }
 		$type_section = count($result) == 0 ? 1 : 0;
 		
-		if ($debug_initial_perms) { echo "PASSED comp_section:$comp_section && category_section:$category_section && article_section:$article_section && field_section:$field_section && type_section:$type_section <br>"; }
+		if ($debug_initial_perms) { echo "PASSED comp_section:$comp_section && category_section:$category_section && field_section:$field_section && type_section:$type_section <br>"; }
 		
-		$init_required = $comp_section && $category_section && $article_section && $field_section && $type_section;
+		$init_required = $comp_section && $category_section && $field_section && $type_section;
 		return $init_required;
 	}
 	
 	
-	function initialPermission() {
+	function initialPermission()
+	{
 		$component_name	= JRequest::getCmd('option');
-		$db 		= JFactory::getDBO();
+		$db     = $this->_db;
 		$asset	= JTable::getInstance('asset');   // Create an asset object
 		
 		/*** Component assets ***/
+		$asset_exists = $asset->loadByName($component_name);
+		if ($asset_exists)
+		{
+			$rules_arr = strlen(trim($asset->rules))  ?  json_decode($asset->rules, true)  :  array();
+		}
 		
-		if (!$asset->loadByName($component_name)) {
-			// The assets entry does not exist: We will create initial rules for all component's actions
+		if ( !$asset_exists || !count($rules_arr) )
+		{
+			// Component asset entry does not exist or is empty: We will create initial rules for all component's actions
 			
 			// Get root asset
 			$root = JTable::getInstance('asset');
@@ -1634,9 +1749,9 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			$asset->setLocation($root->id,'last-child');  // father of compontent asset it the root asset
 			
 			// Create initial component rules and set them into the asset
-			$initial_rules = $this->_createComponentRules($component_name);
-			$component_rules = new JAccessRules(json_encode($initial_rules));
-			$asset->rules = $component_rules->__toString();
+			$component_rules_arr = $this->_createComponentRules($component_name);
+			$component_rules = new JAccessRules($component_rules_arr);
+			$asset->rules = (string) $component_rules;
 			
 			// Save the asset into the DB
 			if (!$asset->check() || !$asset->store()) {
@@ -1644,8 +1759,11 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				$this->setError($asset->getError());
 				return false;
 			}
-		} else {
-			// The assets entry already exists: We will check if it has exactly the actions specified in component's access.xml file
+		}
+		
+		else
+		{
+			// Component assets entry already exists and is non-empty: We will check if it has exactly the actions specified in component's access.xml file
 			
 			// Get existing DB rules and component's actions from the access.xml file
 			$existing_rules = new JAccessRules($asset->rules);
@@ -1659,16 +1777,18 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			$deleted_actions =  array_diff($db_action_names,   $file_action_names);
 			$added_actions   =  array_diff($file_action_names, $db_action_names  );
 			
-			if ( count($deleted_actions) || count($added_actions) ) {
+			if ( count($deleted_actions) || count($added_actions) )
+			{
 				// We have changes in the component actions
 				
 				// First merge the existing component (db) rules into the initial rules
-				$initial_rules = $this->_createComponentRules($component_name);
-				$component_rules = new JAccessRules(json_encode($initial_rules));
+				$component_rules_arr = $this->_createComponentRules($component_name, $added_actions);
+				$component_rules = new JAccessRules($component_rules_arr);
 				$component_rules->merge($existing_rules);
 				
 				// Second, check if obsolete rules are contained in the existing component (db) rules, if so create a new rules object without the obsolete rules
-				if ($deleted_actions) {
+				if ($deleted_actions)
+				{
 					$rules_data = $component_rules->getData();
 					foreach($deleted_actions as $action_name) {
 						unset($rules_data[$action_name]);
@@ -1677,7 +1797,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 				}
 				
 				// Set asset rules
-				$asset->rules = $component_rules->__toString();
+				$asset->rules = (string) $component_rules;
 				
 				// Save the asset
 				if (!$asset->check() || !$asset->store()) {
@@ -1692,82 +1812,59 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		$component_asset = JTable::getInstance('asset');
 		$component_asset->loadByName($component_name);
 		
+		// Load com_content asset
+		$com_content_asset = JTable::getInstance('asset');
+		$com_content_asset->loadByName('com_content');
+		$com_content_name = 'com_content';
+		
 		/*** CATEGORY assets ***/
 		
-		// Get a list com_content categories that do not have assets (or have wrong asset names)
+		// Get a list com_content TOP-LEVEL categories that have wrong asset names (do not point to 'com_content' asset)
+		// (NOTE: we do not longer force category asset creation if asset is not set)
 		$query = $db->getQuery(true)
 			->select('c.id, c.parent_id, c.title, c.asset_id')
 			->from('#__assets AS se')->join('RIGHT', '#__categories AS c ON se.id=c.asset_id AND se.name=concat("com_content.category.",c.id)')
-			->where( '(se.id is NULL OR (c.parent_id=1 AND se.parent_id!='.(int)$asset->id.') )' )
+			->where( '(c.parent_id=1 AND se.parent_id!='.(int)$com_content_asset->id.')' )
+			//->where( '(se.id is NULL OR (c.parent_id=1 AND se.parent_id!='.(int)$com_content_asset->id.') )' )
 			->where( 'c.extension = ' . $db->quote('com_content') )
 			->order('c.level ASC');   // IMPORTANT create categories asset using increasing depth level, so that get parent assetid will not fail
 		$db->setQuery($query);
 		$results = $db->loadObjectList();					if ($db->getErrorNum()) echo $db->getErrorMsg();
 		
-		// Add an asset to every category that doesnot have one
-		if(count($results)>0) {
-			foreach($results as $category) {
-				$parentId = $this->_getAssetParentId(null, $category);
-				$name = "com_content.category.{$category->id}";
-				
-				// Try to load asset for the current CATEGORY ID
-				$asset_found = $asset->loadByName($name);
-				
-				if ( !$asset_found ) {
-					if ($category->asset_id) {
-						// asset name not found but category has an asset id set ?, we could delete it here
-						// but it maybe dangerous to do so ... it might be a legitimate asset_id for something else
-					}
-					
-					// Set id to null since we will be creating a new asset on store
-					$asset->id 		= null;
-					
-					// Set asset rules to empty, (DO NOT set any ACTIONS, just let them inherit ... from parent)
-					$asset->rules = new JAccessRules();
-					
-					/*if ($parentId == $component_asset->id) {				
-						$actions	= JAccess::getActions($component_name, 'category');
-						$rules 		= json_decode($component_asset->rules);		
-						foreach ($actions as $action) {
-							$catrules[$action->name] = $rules->{$action->name};
-						}
-						$rules = new JAccessRules(json_encode($catrules));
-						$asset->rules = $rules->__toString();
-					} else {
-						$parent = JTable::getInstance('asset');
-						$parent->load($parentId);
-						$asset->rules = $parent->rules;
-					}*/
-				} else {
-					// do not change (a) the id OR (b) the rules, of the asset
-				}
-				
-				// Initialize appropriate asset properties
-				$asset->name	= $name;
-				$asset->title	= $category->title;
-				$asset->setLocation($parentId, 'last-child');     // Permissions of categories are inherited by parent category, or from component if no parent category exists
-				
-				// Save the category asset (create or update it)
-				if (!$asset->check() || !$asset->store(false)) {
-					echo $asset->getError();
-					echo " Problem for asset with id: ".$asset ->id;
-					echo " Problem for category with id: ".$category->id. "(".$category->title.")";
-					$this->setError($asset->getError());
-					return false;
-				}
-				
-				// Assign the asset to the category, if it is not already assigned
-				$query = $db->getQuery(true)
-					->update('#__categories')
-					->set('asset_id = ' . (int)$asset->id)
-					->where('id = ' . (int)$category->id);
-				$db->setQuery($query);
-				
-				if (!$db->query()) {
-					echo JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg());
-					$this->setError(JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg()));
-					return false;
-				}
+		// Check that any assets of top-level categories point to the correct component (we used to make these point to 'com_flexicontent' asset)
+		foreach($results as $category)
+		{
+			$parentId = $this->_getAssetParentId(null, $category);
+			$name = "com_content.category.{$category->id}";
+			
+			// Try to load asset for the current CATEGORY ID
+			$asset_found = $asset->loadByName($name);
+			if ( !$asset_found ) continue; // nothing to do
+			
+			// Since this is a top level category make sure, that the asset points to the correct component asset (com_content)
+			$asset->setLocation($parentId, 'last-child');
+			
+			// Save the category asset (create or update it)
+			if (!$asset->check() || !$asset->store(false))
+			{
+				echo $asset->getError();
+				echo " Problem for asset with id: ".$asset ->id;
+				echo " Problem for category with id: ".$category->id. "(".$category->title.")";
+				$this->setError($asset->getError());
+				return false;
+			}
+			
+			// Assign the asset to the category, if it is not already assigned
+			$query = $db->getQuery(true)
+				->update('#__categories')
+				->set('asset_id = ' . (int)$asset->id)
+				->where('id = ' . (int)$category->id);
+			$db->setQuery($query);
+			
+			if (!$db->execute()) {
+				echo JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg());
+				$this->setError(JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg()));
+				return false;
 			}
 		}
 		
@@ -1840,7 +1937,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 					->where('id = ' . (int)$item->id);
 				$db->setQuery($query);
 				
-				if (!$db->query()) {
+				if (!$db->execute()) {
 					echo JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg());
 					$this->setError(JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg()));
 					return false;
@@ -1905,7 +2002,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 					->where('id = ' . (int)$field->id);
 				$db->setQuery($query);
 				
-				if (!$db->query()) {
+				if (!$db->execute()) {
 					echo JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg());
 					$this->setError(JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg()));
 					return false;
@@ -1969,7 +2066,7 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 					->where('id = ' . (int)$type->id);
 				$db->setQuery($query);
 				
-				if (!$db->query()) {
+				if (!$db->execute()) {
 					echo JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg());
 					$this->setError(JText::sprintf('JLIB_DATABASE_ERROR_STORE_FAILED', get_class($this), $db->getErrorMsg()));
 					return false;
@@ -1993,75 +2090,119 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 	 * @return  array
 	 * @since   11.1
 	 */
-	protected function _createComponentRules($component) {
-		
-		$groups 	= $this->_getUserGroups();
-		
-		// Get flexicontent ACTION names, and initialize flexicontent rules to empty *
+	protected function _createComponentRules($component, $added_actions=false)
+	{
+		// **************************
+		// Get com_flexicontent asset
+		// **************************
+
+		$comp_asset = JTable::getInstance('asset');
+		if ( $comp_asset->loadByName('com_flexicontent') )
+			$existing_rules = !empty($comp_asset->rules) ? json_decode($comp_asset->rules, true) : array();
+		else
+			$existing_rules = array();
+		$asset_is_empty = !count($existing_rules);
+
+
+		// *****************************
+		// Get flexicontent ACTION names
+		// *****************************
+
 		$flexi_actions	= JAccess::getActions($component, 'component');
-		$flexi_rules		= array();
-		foreach($flexi_actions as $action) {
-			$flexi_rules[$action->name] = array();  // * WE NEED THIS (even if it remains empty), because we will compare COMPONENT actions in DB when checking initial permissions
-			$flexi_action_names[] = $action->name;  // Create an array of all COMPONENT actions names
+		foreach($flexi_actions as $action)
+		{
+			$flexi_action_names[$action->name] = 1;
 		}
 		
-		// Get Joomla ACTION names
-		$root = JTable::getInstance('asset');
-		$root->loadByName('root.1');
-		$joomla_rules = new JAccessRules( $root->rules );
-		foreach ($joomla_rules->getData() as $action_name => $data) {
-			$joomla_action_names[] = $action_name;
+		// We will either populate all action names or just those that were given (new actions)
+		$new_actions = is_array($added_actions) ? array_flip($added_actions) : $flexi_action_names;
+		
+		// Initialize non-existing flexicontent ACL rules to empty
+		$flexi_rules = array();
+		foreach($new_actions as $action_name => $_i)
+		{
+			// * WE NEED THIS (even if it remains empty array), because we will compare COMPONENT actions in DB when checking initial permissions
+			$flexi_rules[$action_name] = !isset($flexi_rules[$action_name])  ?  array()  :  $flexi_rules[$action_name];
 		}
-		//echo "<pre>"; print_r($rules->getData()); echo "</pre>";
+
+
+		// ****************************************
+		// Get com_content asset and its rule names
+		// ****************************************
+
+		$com_content_asset = JTable::getInstance('asset');
+		$com_content_asset->loadByName('com_content');
+		$com_content_rules = json_decode($com_content_asset->rules, true);
 		
-		
-		// Decide the actions to grant (give) to each user group
-		foreach($groups as $group) {
-			
-			// STEP 1: we will -grant- all NON-STANDARD component ACTIONS to any user group, that has 'core.manage' ACTION in the Global Configuration
-			// NOTE (a): if some user group has the --Super Admin-- Global Configuration ACTION (aka 'core.admin' for asset root.1), then it also has 'core.manage'
-			// NOTE (b):  The STANDARD Joomla ACTIONs will not be set thus they will default to value -INHERIT- (=value "")
-			if(JAccess::checkGroup($group->id, 'core.manage')) {
-				//$flexi_rules['core.manage'][$group->id] = 1;
-				foreach($flexi_action_names as $action_name) {
-					//if ($action_name == 'core.admin') continue;  // component CONFIGURE action, skip it, this will can only be granted by STEP 2
-					if (in_array($action_name, $joomla_action_names)) continue;  // Skip Joomla STANDARD rules allowing them to inherit
-					$flexi_rules[$action_name][$group->id] = 1;
-				}
-			}
-			
-			// STEP 2: we will set ACTIONS already granted in GLOBAL CONFIGURATION (this include the COMPONENT CONFIGURE 'core.admin' action)
-			// NOTE: that actions that do not exist in global configuration, will not be set here, so they will default to the the setting received by STEP 1
-			// NOTE: this was commented out and thus heritage will be used instead for existing Global ACTIONS
-			/*foreach($flexi_action_names as $action_name) {
-				if (JAccess::checkGroup($group->id, $action_name)) {
-					$flexi_rules[$action_name][$group->id] = 1;
-				}
-			}*/
-			
-			// STEP 3: Handle some special case of custom-added ACTIONs
+		foreach ($com_content_rules as $action_name => $data)
+		{
+			$joomla_action_names[$action_name] = 1;
+		}
+		//echo "<pre>"; print_r($com_content_rules); echo "</pre>"; exit;
+
+
+		// *******************************************************************************************
+		// If com_flexicontent ASSET was empty then copy rules from com_content asset and set defaults
+		// *******************************************************************************************
+
+		if ( $asset_is_empty )
+		{
+			// Handle some special case of custom-added ACTIONs
 			// e.g. Grant --OWNED-- actions if they have the corresponding --GENERAL-- actions
-			if( !empty($flexi_rules['core.delete'][$group->id]) ) {
-				if (in_array('core.delete.own', $flexi_action_names)) $flexi_rules['core.delete.own'][$group->id] = 1;          //CanDeleteOwn
+			if ( !isset($com_content_rules['core.delete.own']) )
+				$com_content_rules['core.delete.own'] = isset($com_content_rules['core.delete']) ? $com_content_rules['core.delete'] : array();
+			if ( !isset($com_content_rules['core.edit.state.own']) )
+				$com_content_rules['core.edit.state.own'] = isset($com_content_rules['core.edit.state']) ? $com_content_rules['core.edit.state'] : array();
+			
+			// Copy rules from com_content asset
+			foreach ($com_content_rules as $action_name => $data)
+			{
+				$flexi_rules[$action_name] = $data;
 			}
-			if( !empty($flexi_rules['core.edit.state'][$group->id]) ) {
-				if (in_array('core.edit.state.own', $flexi_action_names)) $flexi_rules['core.edit.state.own'][$group->id] = 1;  //CanPublishOwn
+			
+			// Save the asset into the DB
+			$com_content_asset->rules = json_encode($com_content_rules);
+			if (!$com_content_asset->check() || !$com_content_asset->store())
+			{
+				die($com_content_asset->getError());
 			}
-			// Give these regardless of edit privelege, since if the do not have edit then they cannot access item form and save task anyway
-			//if( !empty($flexi_rules['core.edit'][$group->id]) || !empty($flexi_rules['core.edit.own'][$group->id])) {
-			if( 1 ) {
-				if (in_array('flexicontent.change.cat', $flexi_action_names)) $flexi_rules['flexicontent.change.cat'][$group->id] = 1;  // CanChangeCat
-				if (in_array('flexicontent.change.cat.sec', $flexi_action_names)) $flexi_rules['flexicontent.change.cat.sec'][$group->id] = 1;  // CanChangeSecCat
-				if (in_array('flexicontent.change.cat.feat', $flexi_action_names)) $flexi_rules['flexicontent.change.cat.feat'][$group->id] = 1;  // CanChangeFeatCat
-				if (in_array('flexicontent.uploadfiles', $flexi_action_names)) $flexi_rules['flexicontent.uploadfiles'][$group->id] = 1;  // CanUploadFiles
-			}
-			// By default give to everybody the edit field values privelege
-			if (in_array('flexicontent.editfieldvalues', $flexi_action_names)) $flexi_rules['flexicontent.editfieldvalues'][$group->id] = 1;  //CanEditFieldValues
+			
+			// By default DO NOT SET the edit field values privilege, because we have another parameter "allow any editor" and also to allow easier configuration via SOFT DENY
+			//$flexi_rules['flexicontent.editfieldvalues'] = $flexi_rules['core.edit'];  // can EditFieldValues
 		}
+
+
+		// Grant FLEXIcontent specific rules to user having GLOBAL "core.manage"
+		$groups = $this->_getUserGroups();
+		foreach($groups as $group)
+		{
+			// This unlike JUser::authorize will not return true for super-user, (we don't need to set anything for super-user group, because its users will be authorized by default)
+			if ( JAccess::checkGroup($group->id, 'core.manage') ) foreach($new_actions as $action_name => $_i)
+			{
+				// Skip Joomla STANDARD rules allowing them to inherit (these were copied on initial component installation from com_content asset)
+				if ( isset($joomla_action_names[$action_name]) ) continue;
+				
+				// Set flexicontent specific rule
+				$flexi_rules[$action_name][$group->id] = 1;
+			}
+		}
+
+
+		// ************************************************************************************************
+		// Rules that should be allowed by default, give these to the "Public" and "Registered" user groups
+		// ************************************************************************************************
 		
-		// return rules, a NOTE: MAYBE in future we create better initial permissions by checking allow/deny/inherit values instead of just HAS ACTION ...
+		$grant_to_all = array('flexicontent.change.cat', 'flexicontent.change.cat.sec', 'flexicontent.change.cat.feat', 'flexicontent.uploadfiles', 'flexicontent.editownfile', 'flexicontent.publishownfile', 'flexicontent.deleteownfile');
+		foreach($grant_to_all as $_name)
+		{
+			if ( !isset($new_actions[$_name] ) ) continue;
+			$flexi_rules[$_name][1] = $flexi_rules[$_name][2] = 1;
+		}
+		//echo "<pre>"; print_r($flexi_rules); echo "</pre>"; exit;
+		
 		return $flexi_rules;
 	}
+	
 	
 	/**
 	 * Get a list of the user groups.
@@ -2104,7 +2245,8 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 			$query	= $this->_db->getQuery(true)
 				->select('id')
 				->from('#__assets')
-				->where('name = '.$this->_db->quote(JRequest::getCmd('option')));
+				//->where('name = '.$this->_db->quote(JRequest::getCmd('option')));
+				->where('name = '.$this->_db->quote('com_content'));
 			$this->_db->setQuery($query);
 			$comp_assetid = (int) $this->_db->loadResult();
 		}
@@ -2136,6 +2278,67 @@ class FlexicontentModelFlexicontent extends JModelLegacy
 		} else {
 			return parent::_getAssetParentId($table, $id);
 		}*/
+	}
+
+
+	protected function verifyExtraRules()
+	{
+		$debug_initial_perms = JComponentHelper::getParams('com_flexicontent')->get('debug_initial_perms');
+		
+		$fc_asset = JTable::getInstance('asset');
+		$fc_asset->loadByName('com_flexicontent');
+		$fc_asset_rules = json_decode($fc_asset->rules, true);
+		if ( !count($fc_asset_rules) )  return; // The asset is empty do not try anything
+
+		$com_content_asset = JTable::getInstance('asset');
+		$com_content_asset->loadByName('com_content');
+		$com_content_rules = json_decode($com_content_asset->rules, true);
+		
+		$save_asset = false;
+		
+		foreach($com_content_rules as $rule_name => $rule_data)
+		{
+			if ( isset($fc_asset_rules[$rule_name]) && $com_content_rules[$rule_name] != $fc_asset_rules[$rule_name] )
+			{
+				$com_content_rules[$rule_name] = $fc_asset_rules[$rule_name];
+				$save_asset = true;
+			}
+		}
+		
+		if ( isset($fc_asset_rules['core.delete.own']) )
+		{
+			if ( !isset($com_content_rules['core.delete.own']) || $com_content_rules['core.delete.own'] != $fc_asset_rules['core.delete.own'] )
+			{
+				$com_content_rules['core.delete.own'] = $fc_asset_rules['core.delete.own'];
+				$save_asset = true;
+			}
+		}
+		
+		if ( isset($fc_asset_rules['core.edit.state.own']) )
+		{
+			if ( !isset($com_content_rules['core.edit.state.own']) || $com_content_rules['core.edit.state.own'] != $fc_asset_rules['core.edit.state.own'] )
+			{
+				$com_content_rules['core.edit.state.own'] = $fc_asset_rules['core.edit.state.own'];
+				$save_asset = true;
+			}
+		}
+		
+		if ( !isset($com_content_rules['core.delete.own']) )       $com_content_rules['core.delete.own'] = array();
+		if ( !isset($com_content_rules['core.edit.state.own']) )   $com_content_rules['core.edit.state.own'] = array();
+		
+		if ($save_asset)
+		{
+			$rules = new JAccessRules($com_content_rules);
+			$com_content_asset->rules = (string) $rules;
+			if (!$com_content_asset->check() || !$com_content_asset->store())
+			{
+				throw new RuntimeException($com_content_asset->getError());
+			}
+			if ($debug_initial_perms) JFactory::getApplication()->enqueueMessage( 'Updated component asset with extra rules', 'notice' );
+		}
+		else {
+			if ($debug_initial_perms) JFactory::getApplication()->enqueueMessage( 'No update needed for component asset with extra rules', 'notice' );
+		}
 	}
 }
 ?>

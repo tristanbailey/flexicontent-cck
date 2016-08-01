@@ -20,6 +20,20 @@ defined( '_JEXEC' ) or die( 'Restricted access' );
 // first define the template name
 $tmpl = $this->tmpl;
 $user = JFactory::getUser();
+
+$btn_class = FLEXI_J30GE ? ' btn' : ' fc_button fcsimple fcsmall';
+$tooltip_class = FLEXI_J30GE ? ' hasTooltip' : ' hasTip';
+
+// MICRODATA 'itemtype' for ALL items in the listing (this is the fallback if the 'itemtype' in content type / item configuration are not set)
+$microdata_itemtype_cat = $this->params->get( 'microdata_itemtype_cat', 'Article' );
+
+if ($this->params->get('togglable_table_cols', 1))
+{
+	flexicontent_html::loadFramework('flexi-lib');
+	$start_text = '<span class="label">'.JText::_('FLEXI_TMPL_DEFAULT_COLUMNS_FE', true).'</span>';
+	$end_text = '<div class="icon-arrow-up-2" title="'.JText::_('FLEXI_HIDE').'" style="cursor: pointer;" onclick="fc_toggle_box_via_btn(\\\'mainChooseColBox\\\', document.getElementById(\\\'fc_mainChooseColBox_btn\\\'), \\\'btn-primary\\\');"></div>';
+	flexicontent_html::jscode_to_showhide_table('mainChooseColBox', 'adminListTableFCcategory', $start_text, $end_text);
+}
 ?>
 
 <?php
@@ -36,7 +50,7 @@ $user = JFactory::getUser();
 	}
 ?>
 
-<div class="clear"></div>
+<div class="fcclear"></div>
 
 <?php
 if (!$this->items) {
@@ -58,14 +72,20 @@ $columns = array();
 foreach ($this->items as $item) :
 	if (isset($item->positions['table'])) :
 		foreach ($fbypos['table']->fields as $f) :
-			if ( ! @ $columns[$f] ) :
-				$columns[$f] = @ $item->fields[$f]->label;
+			if ( empty($columns[$f]) && isset($item->fields[$f]) ) :
+				$columns[$f] = $item->fields[$f]->label;
 			endif;
 		endforeach;
 	endif;
 endforeach;
 
 $items = & $this->items;
+$count 	= count($items);
+// Calculate common data outside the item loops
+if ($count) {
+	$_read_more_about = JText::_( 'FLEXI_READ_MORE_ABOUT' );
+	$_comments_container_params = 'class="fc_comments_count_nopad '.$tooltip_class.'" title="'.flexicontent_html::getToolTip('FLEXI_NUM_OF_COMMENTS', 'FLEXI_NUM_OF_COMMENTS_TIP', 1, 1).'"';
+}
 
 // Decide whether to show the edit column
 $buttons_exists = false;
@@ -86,6 +106,11 @@ if ( $user->id ) :
 			endif;
 		endif;
 		
+		if ($item->deletebutton = flexicontent_html::deletebutton( $item, $this->params )) :
+			$buttons_exists = true;
+			$item->deletebutton = '<div class="fc_delete_link">'.$item->deletebutton.'</div>';
+		endif;
+			
 		if ($item->approvalbutton = flexicontent_html::approvalbutton( $item, $this->params )) :
 			$buttons_exists = true;
 			$item->approvalbutton = '<div class="fc_approval_request_link_nopad">'.$item->approvalbutton.'</div>';
@@ -111,18 +136,33 @@ endif;
 ?>
 
 
-<table id="flexitable" class="flexitable" width="100%" border="0" cellspacing="0" cellpadding="0" summary="<?php echo @$this->category->name; ?>">
-	<?php if ($this->params->get('show_field_labels_row', 1)) : ?>
-	<thead>
+<?php if ($this->params->get('togglable_table_cols', 1)) : ?>
+	<div class="btn-group" style="margin: 2px 32px 6px -3px; display:inline-block;">
+		<input type="button" id="fc_mainChooseColBox_btn" class="<?php echo $btn_class; ?>" onclick="fc_toggle_box_via_btn('mainChooseColBox', this, 'btn-primary');" value="<?php echo JText::_( 'FLEXI_TMPL_DEFAULT_COLUMNS_FE' ); ?>" />
+	</div>
+	<div id="mainChooseColBox" class="well well-small" style="display:none;"></div>
+<?php endif; ?>
+
+<table id="adminListTableFCcategory" class="adminlist">
+	
+	<?php if ($this->params->get('show_field_labels_row', 1) || $this->params->get('togglable_table_cols', 1)) : ?>
+	<thead style="<?php echo $this->params->get('show_field_labels_row', 1) ? '' : 'display:none;' ?>">
 		<tr>
 			<?php if ( $buttons_exists || $comments_non_zero || $show_title || count($item->css_markups) ) : ?>
-				<th id="flexi_title" scope="col">
-					<?php echo $show_title ? JHtml::_('grid.sort', 'FLEXI_ITEMS' , 'i.title', $this->lists['filter_order_Dir'], $this->lists['filter_order']) : ''; ?>
+				<th id="flexi_title" class="hideOnDemandClass">
+				
+					<?php echo JText::_(
+						$this->params->get('customize_titlecol_header') && $this->params->get('titlecol_header_text') ?
+							$this->params->get('titlecol_header_text') : ($show_title ? 'FLEXI_ITEMS' : '')
+						); ?>
+					
 				</th>
 			<?php endif; ?>
 			
 			<?php foreach ($columns as $name => $label) : ?>
-				<th id="field_<?php echo $name; ?>" scope="col"><?php echo $label; ?></th>
+				<th id="field_<?php echo $name; ?>" class="hideOnDemandClass">
+					<?php echo $label; ?>
+				</th>
 			<?php endforeach; ?>
 		</tr>
 	</thead>
@@ -131,8 +171,6 @@ endif;
 	<tbody>
 
 	<?php foreach ($items as $i => $item) : ?>
-		<tr id="tablelist_item_<?php echo $i; ?>" class="<?php echo $fc_item_classes; ?>">
-		
 		<?php
 		$fc_item_classes = 'sectiontableentry';
 		
@@ -148,8 +186,15 @@ endif;
 			}
 		}
 		$markup_tags .= '</span>';
+		
+		// MICRODATA document type (itemtype) for each item
+		// -- NOTE: category's microdata itemtype is fallback if the microdata itemtype of the CONTENT TYPE / ITEM are not set
+		$microdata_itemtype = $item->params->get( 'microdata_itemtype') ? $item->params->get( 'microdata_itemtype') : $microdata_itemtype_cat;
+		$microdata_itemtype_code = $microdata_itemtype ? 'itemscope itemtype="http://schema.org/'.$microdata_itemtype.'"' : '';
 		?>
 
+		<tr id="tablelist_item_<?php echo $i; ?>" class="<?php echo $fc_item_classes.' row'.($i%2 ? 1 : 0); ?>" <?php echo $microdata_itemtype_code; ?>>
+		
 		<?php if ( $buttons_exists || $comments_non_zero || $show_title || count($item->css_markups) ) : ?>
 			<td class="fc_title_col">
 			
@@ -159,20 +204,27 @@ endif;
 			
 			<?php if ($this->params->get('show_comments_count')) : ?>
 				<?php if ( isset($this->comments[ $item->id ]->total) ) : ?>
-				<div class="fc_comments_count_nopad hasTip" alt="<?php echo JText::_('FLEXI_NUM_OF_COMMENTS');?>" title="<?php echo JText::_('FLEXI_NUM_OF_COMMENTS');?>::<?php echo JText::_('FLEXI_NUM_OF_COMMENTS_TIP');?>">
+				<div <?php echo $_comments_container_params; ?> >
 					<?php echo $this->comments[ $item->id ]->total; ?>
 				</div>
 				<?php endif; ?>
 			<?php endif; ?>
 			
-			<!-- BOF item title -->
-			<?php if ($show_title) : ?>
-				<?php if ($link_titles) : ?>
-					<a class="fc_item_title" href="<?php echo JRoute::_(FlexicontentHelperRoute::getItemRoute($item->slug, $item->categoryslug, 0, $item)); ?>"><?php echo $item->title; ?></a>
-				<?php else : echo $item->title; endif; ?>
-			<?php endif; ?>
-			<!-- EOF item title -->
+			<div class="fcclear fc_afterbutton"></div>
 			
+			<?php if ($show_title) : ?>
+				<!-- BOF item title -->
+				<span class="fc_item_title" itemprop="name">
+				<?php if ($link_titles) : ?>
+					<a href="<?php echo JRoute::_(FlexicontentHelperRoute::getItemRoute($item->slug, $item->categoryslug, 0, $item)); ?>" itemprop="url"><?php echo $item->title; ?></a>
+   			<?php else : ?>
+					<?php echo $item->title; ?>
+				<?php endif; ?>
+				</span>
+				<!-- EOF item title -->
+			<?php endif; ?>
+			
+			<div class="fcclear fc_beforemarkups"></div>
 			<?php echo $markup_tags; ?>
 			
 			</td>

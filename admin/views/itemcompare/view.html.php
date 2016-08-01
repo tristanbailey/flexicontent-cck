@@ -18,7 +18,7 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * View class for the FLEXIcontent item comparison screen
@@ -43,9 +43,6 @@ class FlexicontentViewItemcompare extends JViewLegacy {
 		$codemode = JRequest::getInt('codemode',0);
 		$cparams  = JComponentHelper::getParams('com_flexicontent');
 		
-		FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
-		flexicontent_html::loadFramework('jQuery');
-		JHTML::_('behavior.tooltip');
 		JHTML::_('behavior.modal');
 
 		//a trick to avoid loosing general style in modal window
@@ -60,27 +57,47 @@ class FlexicontentViewItemcompare extends JViewLegacy {
 		$tparams		= $this->get( 'Typeparams' );
 				
 		// Create the type parameters
-		$tparams = FLEXI_J16GE ? new JRegistry($tparams) : new JParameter($tparams);
+		$tparams = new JRegistry($tparams);
 		
 		// Add html to field object trought plugins
 		foreach ($fields as $field)
 		{
-			if ($field->value) {
+			// Render current field value
+			if ($field->iscore) {
+				$items_params = null;
+				FLEXIUtilities::call_FC_Field_Func('core', 'onDisplayCoreFieldValue', array( &$field, &$row, &$items_params, false, false, false, false, false, null, 'display' ));
+			}
+			else if ($field->value) {
 				//$results = $dispatcher->trigger('onDisplayFieldValue', array( &$field, $row ));
-				$fieldname = $field->iscore ? 'core' : $field->field_type;
-				FLEXIUtilities::call_FC_Field_Func($fieldname, 'onDisplayFieldValue', array( &$field, $row ));
-			} else {
+				$field_type = $field->field_type;
+				FLEXIUtilities::call_FC_Field_Func($field_type, 'onDisplayFieldValue', array( &$field, $row ));
+			}
+			else {
 				$field->display = '<span class="novalue">' . JText::_('FLEXI_NO_VALUE') . '</span>';
 			}
-			if ($field->version) {
-				//$results = $dispatcher->trigger('onDisplayFieldValue', array( &$field, $row, $field->version, 'displayversion' ));
-				$fieldname = $field->iscore ? 'core' : $field->field_type;
-				FLEXIUtilities::call_FC_Field_Func($fieldname, 'onDisplayFieldValue', array( &$field, $row, $field->version, 'displayversion' ));
+			
+			// Render versioned field value
+			if ($field->version)
+			{
+				if ( in_array($field->field_type, array(/*'tags', 'categories', */'maintext')) )
+				{
+					// TODO render more core fields for versioned value, $field->version is raw we need to convert it to $categories, $tags, etc
+					$items_params = null;
+					FLEXIUtilities::call_FC_Field_Func('core', 'onDisplayCoreFieldValue', array( &$field, &$row, &$items_params, false, false, false, false, false, $field->version, 'displayversion' ));
+				}
+				else if ($field->iscore) {
+					$field->displayversion = $field->version;
+				}
+				else {
+					//$results = $dispatcher->trigger('onDisplayFieldValue', array( &$field, $row, $field->version, 'displayversion' ));
+					$field_type = $field->field_type;
+					FLEXIUtilities::call_FC_Field_Func($field_type, 'onDisplayFieldValue', array( &$field, $row, $field->version, 'displayversion' ));
+				}
 			} else {
 				$field->displayversion = '<span class="novalue">' . JText::_('FLEXI_NO_VALUE') . '</span>';
 			}
 		}
-
+		
 		//assign data to template
 		$this->assignRef('document'     , $document);
 		$this->assignRef('row'      	, $row);

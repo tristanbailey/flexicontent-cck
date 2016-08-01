@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.controller');
+// Register autoloader for parent controller, in case controller is executed by another component
+JLoader::register('FlexicontentController', JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'controller.php');
 
 /**
  * FLEXIcontent Component Item Controller
@@ -74,17 +75,22 @@ class FlexicontentControllerItems extends FlexicontentController
 		$date_format = ( $date_format == $jt_date_format ) ? $df_date_format : $date_format;
 		$ctrl_task = FLEXI_J16GE ? 'task=items.edit' : 'controller=items&task=edit';
 		foreach($versions as $v) {
-			$class = ($v->nr == $active) ? ' class="active-version"' : '';
-			echo "<tr".$class."><td class='versions'>#".$v->nr."</td>
-				<td class='versions'>".JHTML::_('date', (($v->nr == 1) ? $item->created : $v->date), $date_format )."</td>
-				<td class='versions'>".(($v->nr == 1) ? $item->creator : $v->modifier)."</td>
-				<td class='versions' align='center'><a href='#' class='hasTip' title='Comment::".$v->comment."'>".$comment."</a>";
-				if((int)$v->nr==(int)$currentversion) {//is current version?
-					echo "<a onclick='javascript:return clickRestore(\"index.php?option=com_flexicontent&".$ctrl_task."&cid=".$item->id."&version=".$v->nr."\");' href='#'>".JText::_( 'FLEXI_CURRENT' )."</a>";
-				}else{
-					echo "<a class='modal-versions' href='index.php?option=com_flexicontent&view=itemcompare&cid[]=".$item->id."&version=".$v->nr."&tmpl=component' title='".JText::_( 'FLEXI_COMPARE_WITH_CURRENT_VERSION' )."' rel='{handler: \"iframe\", size: {x:window.getSize().scrollSize.x-100, y: window.getSize().size.y-100}}'>".$view."</a><a onclick='javascript:return clickRestore(\"index.php?option=com_flexicontent&".$ctrl_task."&cid=".$item->id."&version=".$v->nr."&".(FLEXI_J30GE ? JSession::getFormToken() : JUtility::getToken())."=1\");' href='#' title='".JText::sprintf( 'FLEXI_REVERT_TO_THIS_VERSION', $v->nr )."'>".$revert;
-				}
-				echo "</td></tr>";
+			$class = ($v->nr == $active) ? ' id="active-version"' : '';
+			echo '
+			<tr'.$class.'>
+				<td class="versions">#'.$v->nr.'</td>
+				<td class="versions">'.JHTML::_('date', (($v->nr == 1) ? $item->created : $v->date), $date_format ).'</td>
+				<td class="versions">'.(($v->nr == 1) ? $item->creator : $v->modifier).'</td>
+				<td class="versions" align="center">
+					<a href="javascript:;" class="hasTooltip" title="'.JHtml::tooltipText( JText::_( 'FLEXI_COMMENT' ), ($v->comment ? $v->comment : 'No comment written'), 0, 1).'">'.$comment.'</a>
+				'.(
+				((int)$v->nr==(int)$currentversion) ? // is current version ?
+					'<a onclick="javascript:return clickRestore(\'index.php?option=com_flexicontent&'.$ctrl_task.'&cid='.$item->id.'&version='.$v->nr.'\');" href="javascript:;">'.JText::_( 'FLEXI_CURRENT' ).'</a>' :
+					'<a class="modal-versions" href="index.php?option=com_flexicontent&view=itemcompare&cid[]='.$item->id.'&version='.$v->nr.'&tmpl=component" title="'.JText::_( 'FLEXI_COMPARE_WITH_CURRENT_VERSION' ).'" rel="{handler: \'iframe\', size: {x:window.getSize().scrollSize.x-100, y: window.getSize().size.y-100}}">'.$view.'</a>
+					<a onclick="javascript:return clickRestore(\'index.php?option=com_flexicontent&'.$ctrl_task.'&cid='.$item->id.'&version='.$v->nr.'&'.JSession::getFormToken().'=1\');" href="javascript:;" title="'.JText::sprintf( 'FLEXI_REVERT_TO_THIS_VERSION', $v->nr ).'">'.$revert.'</a>
+				').'
+				</td>
+			</tr>';
 		}
 		exit;
 	}
@@ -144,121 +150,106 @@ class FlexicontentControllerItems extends FlexicontentController
 	 * 
 	 * @since 1.5
 	 */
-	function viewtags() {
+	function viewtags()
+	{
 		// Check for request forgeries
 		JRequest::checkToken('request') or jexit( 'Invalid Token' );
-
-		$user	= JFactory::getUser();
 		
-		if (FLEXI_J16GE) {
-			$permission = FlexicontentHelperPerm::getPerm();
-			$CanUseTags = $permission->CanUseTags;
-		} else if (FLEXI_ACCESS) {
-			$CanUseTags = ($user->gid < 25) ? FAccess::checkComponentAccess('com_flexicontent', 'usetags', 'users', $user->gmid) : 1;
+		@ob_end_clean();
+		//header("Content-type:text/json");
+		//header('Content-type: application/json');
+		//header('Content-type: text/plain; charset=utf-8');  // this text/plain is browser's default
+		header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+		header("Cache-Control: no-cache");
+		header("Pragma: no-cache");
+		
+		$perms = FlexicontentHelperPerm::getPerm();
+		if ( !$perms->CanUseTags ) {
+			$array =  array("{\"id\":\"0\",\"name\":\"You have no access\"}");
 		} else {
-			// no FLEXIAccess everybody can create / use tags
-			$CanUseTags = 1;
-		}
-		if($CanUseTags) {
-			//header('Content-type: application/json');
-			@ob_end_clean();
-			header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
-			header("Cache-Control: no-cache");
-			header("Pragma: no-cache");
-			//header("Content-type:text/json");
-			$model 		=  $this->getModel('item');
-			$tagobjs 	=  $model->gettags(JRequest::getVar('q'));
-			$array = array();
-			echo "[";
+			$model   = $this->getModel(FLEXI_ITEMVIEW);
+			$tagobjs = $model->gettags(JRequest::getVar('q'));
+			$array   = array();
 			if ($tagobjs) foreach($tagobjs as $tag) {
 				$array[] = "{\"id\":\"".$tag->id."\",\"name\":\"".$tag->name."\"}";
 			}
-			echo implode(",", $array);
-			echo "]";
-			exit;
+			if (empty($array)) $array   = array("{\"id\":\"0\",\"name\":\"".($perms->CanCreateTags ? 'New tag, click enter to create' : 'No tags found')."\"}");
 		}
+		
+		echo "[\n" . implode(",\n", $array) . "\n]";
+		exit;
 	}
-
-
+	
+	
 	/**
 	 * Method to select new state for many items
 	 * 
 	 * @since 1.5
 	 */
-	function selectstate() {
-		$user	= JFactory::getUser();
+	function selectstate()
+	{
+		// Use general permissions since we do not have examine any specific item
+		$permission = FlexicontentHelperPerm::getPerm();
+		$auth_publish = $permission->CanPublish || $permission->CanPublishOwn || $permission->CanPublish==null || $permission->CanPublishOwn==null;
+		$auth_delete  = $permission->CanDelete  || $permission->CanDeleteOwn  || $permission->CanDelete==null  || $permission->CanDeleteOwn==null;
+		$auth_archive = $permission->CanArchives;
 		
-		// General permission since we do not have a specific item yet
-		if (FLEXI_J16GE) {
-			$permission = FlexicontentHelperPerm::getPerm();
-			$auth_publish = $permission->CanPublish || $permission->CanPublishOwn;
-			$auth_delete  = $permission->CanDelete  || $permission->CanDeleteOwn;
-			$auth_archive = $permission->CanArchives;
-		} else if (FLEXI_ACCESS) {
-			$auth_publish  = ($user->gid < 25) ? (FAccess::checkComponentAccess('com_content', 'publish', 'users', $user->gmid) || FAccess::checkComponentAccess('com_content', 'publishown', 'users', $user->gmid)) : 1;
-			$auth_delete   = ($user->gid < 25) ? (FAccess::checkComponentAccess('com_content', 'delete', 'users', $user->gmid) || FAccess::checkComponentAccess('com_content', 'deleteown', 'users', $user->gmid)) : 1;
-			$auth_archive  = ($user->gid < 25) ? FAccess::checkComponentAccess('com_flexicontent', 'archives', 'users', $user->gmid) : 1;
-		} else {
-			$auth_publish = $user->authorize('com_content', 'publish', 'content', 'all');
-			$auth_delete  = $user->gid >= 23; // is at least manager
-			$auth_archive = $user->gid >= 23; // is at least manager
-		}
-		
-		if($auth_publish || $auth_archive || $auth_delete) {
+		if($auth_publish || $auth_archive || $auth_delete)
+		{
 			//header('Content-type: application/json');
 			@ob_end_clean();
+			header('Content-type: text/html; charset=utf-8');
 			header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
 			header("Cache-Control: no-cache");
 			header("Pragma: no-cache");
+			
+			$fc_css = JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css';
+			echo '
+			<link rel="stylesheet" href="'.JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css?'.FLEXI_VHASH.'" />
+			<link rel="stylesheet" href="'.$fc_css.'?'.FLEXI_VHASH.'" />
+			<link rel="stylesheet" href="'.JURI::root(true).'/media/jui/css/bootstrap.min.css" />
+			';
+			?>
+	<div id="flexicontent" class="flexicontent">
 
-			echo '<link rel="stylesheet" href="'.JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css" />';
-			if      (FLEXI_J30GE) $fc_css = JURI::base().'components/com_flexicontent/assets/css/j3x.css';
-			else if (FLEXI_J16GE) $fc_css = JURI::base().'components/com_flexicontent/assets/css/j25.css';
-			else                  $fc_css = JURI::base().'components/com_flexicontent/assets/css/j15.css';
-			echo '<link rel="stylesheet" href="'.$fc_css.'" />';
+			<?php
+			$btn_class = FLEXI_J30GE ? ' btn btn-small' : ' fc_button fcsimple fcsmall';
 			
 			if ($auth_publish) {
-				$state['P'] = array( 'name' =>'FLEXI_PUBLISHED', 'desc' =>'FLEXI_PUBLISHED_DESC', 'icon' => 'tick.png', 'color' => 'darkgreen' );
-				$state['IP'] = array( 'name' =>'FLEXI_IN_PROGRESS', 'desc' =>'FLEXI_NOT_FINISHED_YET', 'icon' => 'publish_g.png', 'color' => 'darkgreen', 'clear' => true );
-				$state['U'] = array( 'name' =>'FLEXI_UNPUBLISHED', 'desc' =>'FLEXI_UNPUBLISHED_DESC', 'icon' => 'publish_x.png', 'color' => 'darkred' );
-				$state['PE'] = array( 'name' =>'FLEXI_PENDING', 'desc' =>'FLEXI_NEED_TO_BE_APPROVED', 'icon' => 'publish_r.png', 'color' => 'darkred' );
-				$state['OQ'] = array( 'name' =>'FLEXI_TO_WRITE', 'desc' =>'FLEXI_TO_WRITE_DESC', 'icon' => 'publish_y.png', 'color' => 'darkred', 'clear' => true );
+				$state['P'] = array( 'name' =>'FLEXI_PUBLISHED', 'desc' =>'FLEXI_PUBLISHED_DESC', 'icon' => 'tick.png', 'btn_class' => 'btn-success' );
+				$state['IP'] = array( 'name' =>'FLEXI_IN_PROGRESS', 'desc' =>'FLEXI_NOT_FINISHED_YET', 'icon' => 'publish_g.png', 'btn_class' => 'btn-success', 'clear' => true );
+				$state['U'] = array( 'name' =>'FLEXI_UNPUBLISHED', 'desc' =>'FLEXI_UNPUBLISHED_DESC', 'icon' => 'publish_x.png', 'btn_class' => 'btn-warning' );
+				$state['PE'] = array( 'name' =>'FLEXI_PENDING', 'desc' =>'FLEXI_NEED_TO_BE_APPROVED', 'icon' => 'publish_r.png', 'btn_class' => 'btn-warning' );
+				$state['OQ'] = array( 'name' =>'FLEXI_TO_WRITE', 'desc' =>'FLEXI_TO_WRITE_DESC', 'icon' => 'publish_y.png', 'btn_class' => 'btn-warning', 'clear' => true );
 			}
 			if ($auth_archive) {
-				$state['A'] = array( 'name' =>'FLEXI_ARCHIVED', 'desc' =>'FLEXI_ARCHIVED_STATE', 'icon' => 'archive.png', 'color' => 'gray' );
+				$state['A'] = array( 'name' =>'FLEXI_ARCHIVED', 'desc' =>'FLEXI_ARCHIVED_STATE', 'icon' => 'archive.png', 'btn_class' => 'btn-info' );
 			}
 			if ($auth_delete) {
-				$state['T'] = array( 'name' =>'FLEXI_TRASHED', 'desc' =>'FLEXI_TRASHED_TO_BE_DELETED', 'icon' => 'trash.png', 'color' => 'gray' );
+				$state['T'] = array( 'name' =>'FLEXI_TRASHED', 'desc' =>'FLEXI_TRASHED_TO_BE_DELETED', 'icon' => 'trash.png', 'btn_class' => 'btn-danger' );
 			}
 			echo "<b>". JText::_( 'FLEXI_SELECT_STATE' ).":</b><br /><br />";
 		?>
 			
 		<?php
 			foreach($state as $shortname => $statedata) {
-				$css = "width:28%; margin:0px 1% 12px 1%; padding:1%; color:".$statedata['color'].";";
+				$css = "width:216px; margin:0px 24px 12px 0px;";
 				$link = JURI::base(true)."/index.php?option=com_flexicontent&task=items.changestate&newstate=".$shortname."&".(FLEXI_J30GE ? JSession::getFormToken() : JUtility::getToken())."=1";
 				$icon = "../components/com_flexicontent/assets/images/".$statedata['icon'];
 		?>
-				<a style="<?php echo $css; ?>" class="fc_button" href="javascript:;"
-						onclick="
-							window.parent.document.adminForm.newstate.value='<?php echo $shortname; ?>';
-							if(window.parent.document.adminForm.boxchecked.value==0)
-								alert('<?php echo JText::_('FLEXI_NO_ITEMS_SELECTED'); ?>');
-							else
-		<?php if (FLEXI_J16GE) { ?>
-								window.parent.Joomla.submitbutton('items.changestate')";
-		<?php } else { ?>
-								window.parent.submitbutton('changestate')";
-		<?php } ?>
-						target="_parent">
-					<img src="<?php echo $icon; ?>" width="16" height="16" border="0" alt="<?php echo JText::_( $statedata['desc'] ); ?>" />
+			<span class="fc-filter nowrap_box">
+				<?php /*<img src="<?php echo $icon; ?>" style="margin:4px 0 0 0; border-width:0px; vertical-align:top;" alt="<?php echo JText::_( $statedata['desc'] ); ?>" /> &nbsp;*/ ?>
+				<span style="<?php echo $css; ?>" class="<?php echo $btn_class.' '.$statedata['btn_class']; ?>"
+					onclick="window.parent.document.adminForm.newstate.value='<?php echo $shortname; ?>'; window.parent.document.adminForm.boxchecked.value==0  ?  alert('<?php echo JText::_('FLEXI_NO_ITEMS_SELECTED'); ?>')  :  window.parent.Joomla.submitbutton('items.changestate')"
+				>
 					<?php echo JText::_( $statedata['name'] ); ?>
-				</a>
+				</span>
+			</span>
 		<?php
-				if ( isset($statedata['clear']) ) echo "<div style='width:100%; float: left; clear both;'></div>";
+				if ( isset($statedata['clear']) ) echo '<div class="fcclear"></div>';
 			}
 		?>
-			
+	</div>
 		<?php
 			exit();
 		}

@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
+use Joomla\String\StringHelper;
 
 /**
  * View class for the tagelement screen
@@ -39,19 +40,19 @@ class FlexicontentViewTagelement extends JViewLegacy {
 		$document = JFactory::getDocument();
 		$template = $mainframe->getTemplate();
 		
-		JHTML::_('behavior.tooltip');
+		//JHTML::_('behavior.tooltip');
 		JHTML::_('behavior.modal');
 
 		//get var
 		$filter_order		= $mainframe->getUserStateFromRequest( $option.'.tags.filter_order', 		'filter_order', 	't.name', 'cmd' );
 		$filter_order_Dir	= $mainframe->getUserStateFromRequest( $option.'.tags.filter_order_Dir',	'filter_order_Dir',	'', 'word' );
 		$search 			= $mainframe->getUserStateFromRequest( $option.'.tags.search', 			'search', 			'', 'string' );
-		$search 			= FLEXI_J16GE ? $db->escape( trim(JString::strtolower( $search ) ) ) : $db->getEscaped( trim(JString::strtolower( $search ) ) );
+		$search 			= $db->escape( StringHelper::trim(StringHelper::strtolower( $search ) ) );
 
 		//prepare the document
 		$document->setTitle(JText::_( 'FLEXI_SELECTITEM' ));
-		$document->addStyleSheet(JURI::root().'administrator/templates/'.$template.(FLEXI_J16GE ? '/css/template.css': '/css/general.css'));
-		$document->addStyleSheet(JURI::root().'components/com_flexicontent/assets/css/flexicontent.css');
+		$document->addStyleSheet(JURI::root(true).'/templates/'.$template.(FLEXI_J16GE ? '/css/template.css': '/css/general.css'));
+		$document->addStyleSheetVersion(JURI::root(true).'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH);
 
 		//Get data from the model
 		$rows    = $this->get( 'Data');

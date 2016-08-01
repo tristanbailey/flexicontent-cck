@@ -19,7 +19,7 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.model');
+jimport('legacy.model.legacy');
 
 /**
  * FLEXIcontent Component Tag Model
@@ -59,8 +59,8 @@ class FlexicontentModelTag extends JModelLegacy
 	function setId($id)
 	{
 		// Set tag id and wipe data
-		$this->_id	    = $id;
-		$this->_tag	= null;
+		$this->_id  = $id;
+		$this->_tag = null;
 	}
 	
 	/**
@@ -89,9 +89,9 @@ class FlexicontentModelTag extends JModelLegacy
 	 * @return	array
 	 * @since	1.0
 	 */
-	function &getTag()
+	function & getTag($name = null)
 	{
-		if ($this->_loadTag())
+		if ($this->_loadTag($name))
 		{
 
 		}
@@ -108,23 +108,33 @@ class FlexicontentModelTag extends JModelLegacy
 	 * @return	boolean	True on success
 	 * @since	1.0
 	 */
-	function _loadTag()
+	function _loadTag($name = null)
 	{
 		// Lets load the tag if it doesn't already exist
 		if (empty($this->_tag))
 		{
-			$query = 'SELECT *'
-					. ' FROM #__flexicontent_tags'
-					. ' WHERE id = '.$this->_id
-					;
-			$this->_db->setQuery($query);
-			$this->_tag = $this->_db->loadObject();
-
+			$name_quoted = $name && strlen($name) ? $this->_db->Quote($name) : null;
+			if (!$name_quoted && !$this->_id) {
+				$this->_tag = false;
+			} else {
+				
+				$query = 'SELECT *'
+						. ' FROM #__flexicontent_tags'
+						. ' WHERE '
+						.(!$name_quoted ? ' id='.$this->_id : '')
+						.($name_quoted  ? ' name='.$name_quoted : '')
+						;
+				$this->_db->setQuery($query);
+				$this->_tag = $this->_db->loadObject();
+			}
+			
+			if ($this->_tag) $this->_id = $this->_tag->id;
 			return (boolean) $this->_tag;
 		}
 		return true;
 	}
-
+	
+	
 	/**
 	 * Method to initialise the tag data
 	 *
@@ -137,12 +147,16 @@ class FlexicontentModelTag extends JModelLegacy
 		// Lets load the tag if it doesn't already exist
 		if (empty($this->_tag))
 		{
-			$tag = new stdClass();
-			$tag->id					= 0;
+			$tag = $this->getTable('flexicontent_tags', $_prefix='');
+
+			$tag->id						= 0;
 			$tag->name					= null;
 			$tag->alias					= null;
-			$tag->published				= 1;
-			$this->_tag				= $tag;
+			$tag->published			= 1;
+			$tag->checked_out   = 0;
+			$tag->checked_out_time	= '';
+
+			$this->_tag = $tag;
 			return (boolean) $this->_tag;
 		}
 		return true;
@@ -158,9 +172,11 @@ class FlexicontentModelTag extends JModelLegacy
 	function checkin($pk = NULL)
 	{
 		if (!$pk) $pk = $this->_id;
-		if ($pk) {
-			$item = JTable::getInstance('flexicontent_tags', '');
-			return $item->checkin($pk);
+
+		if ($pk)
+		{
+			$tbl = $this->getTable('flexicontent_tags', $_prefix='');
+			return $tbl->checkin($pk);
 		}
 		return false;
 	}
@@ -185,7 +201,7 @@ class FlexicontentModelTag extends JModelLegacy
 		$uid	= $user->get('id');
 		
 		// Lets get table record and checkout the it
-		$tbl = JTable::getInstance('flexicontent_tags', '');
+		$tbl = $this->getTable('flexicontent_tags', $_prefix='');
 		if ( $tbl->checkout($uid, $this->_id) ) return true;
 		
 		// Reaching this points means checkout failed
@@ -219,6 +235,7 @@ class FlexicontentModelTag extends JModelLegacy
 		}
 	}
 
+
 	/**
 	 * Method to store the tag
 	 *
@@ -228,7 +245,7 @@ class FlexicontentModelTag extends JModelLegacy
 	 */
 	function store($data)
 	{
-		$tag = $this->getTable('flexicontent_tags', '');
+		$tag = $this->getTable('flexicontent_tags', $_prefix='');
 
 		// bind it to the table
 		if (!$tag->bind($data)) {
@@ -252,17 +269,26 @@ class FlexicontentModelTag extends JModelLegacy
 
 		return true;
 	}
-	
-	function addtag($name){
-		
+
+
+	/**
+	 * Method to add a new tag
+	 *
+	 * @access	public
+	 * @return	boolean	True on success
+	 * @since	1.0
+	 */
+	function addtag($name)
+	{	
 		$obj = new stdClass();
 		$obj->name	 	= $name;
 		$obj->published	= 1;
 		
-		if($this->store($obj)) {
+		if ($this->store($obj))
+		{
 			return true;
 		}
-
+		
 		return false;
 	}
 

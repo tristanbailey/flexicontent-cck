@@ -14,7 +14,7 @@
  */
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.event.plugin');
+jimport('cms.plugin.plugin');
 
 class plgFlexicontent_fieldsLinkslist extends JPlugin
 {
@@ -30,7 +30,7 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 	// CONSTRUCTOR
 	// ***********
 	
-	function plgFlexicontent_fieldsLinkslist( &$subject, $params )
+	function __construct( &$subject, $params )
 	{
 		parent::__construct( $subject, $params );
 		JPlugin::loadLanguage('plg_flexicontent_fields_linkslist', JPATH_ADMINISTRATOR);
@@ -45,7 +45,6 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 	// Method to create field's HTML display for item form
 	function onDisplayField(&$field, &$item)
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		$field->label = JText::_($field->label);
@@ -54,7 +53,7 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 		$field_elements	= $field->parameters->get( 'field_elements' ) ;
 		$default_values	= $field->parameters->get( 'default_values', '' ) ;
 		
-		// Prefix - Suffix - Separator parameters, replacing other field values if found
+		// Prefix - Suffix - Separator (item FORM) parameters
 		$pretext			= $field->parameters->get( 'pretext_form', '' ) ;
 		$posttext			= $field->parameters->get( 'posttext_form', '' ) ;
 		$separator		= $field->parameters->get( 'separator', 0 ) ;
@@ -101,24 +100,46 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 		
 		if(strlen($field_elements) === 0) return $field->html = '<div id="fc-change-error" class="fc-error">Please enter at least one item. Example: <pre style="display:inline-block; margin:0">{"item1":{"name":"Item1"},"item2":{"name":"Item2"}}</pre></div>';
 		
-		$items = $this->prepare($field_elements);
-
+		$elements = $this->parseElements($field, $field_elements);
+		
+		$fieldname = 'custom['.$field->name.'][]';
+		$elementid = 'custom_'.$field->name;
+		
 		$options = array();
-		foreach ($items as $title => $val)
+		
+		// Render as multi-select form field
+		if ( $field->parameters->get( 'editform_field_type', 1 ) == 2 )
 		{
-			$fieldname = FLEXI_J16GE ? 'custom['.$field->name.'][]' : $field->name.'[]';
-			$checked  = in_array($title, $field->value) ? ' checked="checked"' : null;
-			$options[] =
-				'<input type="checkbox" class="'.$required.'" name="'.$fieldname.'" value="'.$title.'" id="'.$field->name.'_'.$title.'"'.$checked.' />'.
-				'<label for="'.$field->name.'_'.$title.'">'.$title.'</label>';
+			foreach ($elements as $li_title => $li_params) {
+				$options[] = JHTML::_('select.option', $li_title, $li_title);
+			}
+			$field->html	= JHTML::_('select.genericlist', $options, $fieldname, 'class="use_select2_lib'.$required.'" multiple="multiple"', 'value', 'text', $field->value, $elementid);
 		}
 		
-		// Apply values separator
-		$field->html = implode($separator, $options);
+		// Render as checkboxes
+		else
+		{
+			$n = 0;
+			foreach ($elements as $li_title => $li_title)
+			{
+				$checked  = in_array($li_title, $field->value) ? ' checked="checked"' : null;
+				$options[] = ''
+					.$pretext
+					.'<input type="checkbox" class="'.$required.'" name="'.$fieldname.'" value="'.$li_title.'" id="'.$elementid.'_'.$n.'"'.$checked.' />'
+					.'<label for="'.$elementid.'_'.$n.'">'.$li_title.'</label>'
+					.$posttext
+					;
+				$n++;
+			}
+			
+			// Apply values separator
+			$field->html = implode($separator, $options);
+			
+			// Apply field 's opening / closing texts
+			if ($field->html)
+				$field->html = $opentag . $field->html . $closetag;
+		}
 		
-		// Apply field 's opening / closing texts
-		if ($field->html)
-			$field->html = $opentag . $field->html . $closetag;
 	}
 	
 	
@@ -126,15 +147,14 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 	function onDisplayFieldValue(&$field, $item, $values=null, $prop='display')
 	{
 		$field->label = JText::_($field->label);
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		$values = $values ? $values : $field->value;
 		
-		$display_non_selected = $field->parameters->get( 'display_non_selected', 0 ) ;
+		$add_non_selected = $field->parameters->get( 'add_non_selected', 0 ) ;
 		// Parse list elements, and create HTML of list elements
 		$field_elements = $field->parameters->get( 'field_elements', '' ) ;
-		$elements = $this->prepare($field_elements);
+		$elements = $this->parseElements($field, $field_elements);
 		
 		
 		// Get list type and its list TAG parameters
@@ -148,25 +168,32 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 		
 		
 		// Create HTML of list elements
-		$items = array();
-		foreach($elements as $name => $item)
+		$options = array();
+		foreach($elements as $li_title => $li_params)
 		{
-			if ( !$display_non_selected && !in_array($name, $values) ) continue;
-			$attr = $item;
+			$is_selected = in_array($li_title, $values);
+			if ( !$add_non_selected && !$is_selected ) continue;
+			
 			$prefix = $suffix = '';
-			if ($display_non_selected) {
+			if ($is_selected)
+			{
+				if (isset($li_params['link'])) {
+					$prefix = '<a href="'.$li_params['link'].'">';
+					$suffix = '</a>';
+				} else {
+					$prefix = '<span class="fc_linklist_text_only" >';
+					$suffix = '</span>';
+				}
+			}
+			else {
 				$prefix = '<span class="fc_linklist_non_selected" >';
 				$suffix = '</span>';
-				unset($attr['link']);
-			} else if (isset($attr['link']))
-			{
-				$prefix = '<a href="'.$attr['link'].'">';
-				$suffix = '</a>';
-				unset($attr['link']);
 			}
-			array_walk($attr, array($this, 'walk'), $name);
-			$attr = $attr ? ' '.implode(' ', $attr) : null;
-			$items[] = '<li'.$attr.'>'.$prefix.$name.$suffix.'</li>';
+			unset($li_params['link']);
+			
+			array_walk($li_params, array($this, 'walk'), $li_title);
+			$li_params = $li_params ? ' '.implode(' ', $li_params) : null;
+			$options[] = '<li'.$li_params.'>'.$prefix.$li_title.$suffix.'</li>';
 		}
 		
 		static $js_code_added = null;
@@ -183,10 +210,10 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 		}
 		
 		// Create the HTML of the list
-		if (!count($items)) return $field->{$prop} = '';
+		if (!count($options)) return $field->{$prop} = '';
 		return $field->{$prop} =
 			'<'.$list_type . $list_params.'>'.
-				implode($items).
+				implode($options).
 			'</'.$list_type.'>';
 	}
 	
@@ -199,7 +226,6 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 	// Method to handle field's values before they are saved into the DB
 	function onBeforeSaveField( &$field, &$post, &$file, &$item )
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		if(!is_array($post) && !strlen($post)) return;
 		
@@ -208,7 +234,7 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 			$searchindex = '';
 			
 			$field_elements = $field->parameters->get( 'field_elements', '' ) ;
-			$elements = $this->prepare($field_elements);
+			$elements = $this->parseElements($field, $field_elements);
 			
 			$searchindex  = implode(' ', array_keys($elements));
 			$searchindex .= ' | ';
@@ -248,26 +274,18 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 	// Method to display a category filter for the category view
 	function onDisplayFilter(&$filter, $value='', $formName='adminForm')
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($filter->field_type, self::$field_types) ) return;
 
 		// some parameter shortcuts
-		$field_elements		= $filter->parameters->get( 'field_elements' ) ;
-						
-		$field_elements = $field->parameters->get( 'field_elements', '' ) ;
-		$elements = $this->prepare($field_elements);
+		$field_elements = $filter->parameters->get( 'field_elements' ) ;
+		$elements = $this->parseElements($filter, $field_elements);
 		
-		$listarrays = array();
-		foreach ($listelements as $listelement) {
-			$listarrays[] = explode("::", $listelement);
-		}
-
 		$options = array(); 
 		$options[] = JHTML::_('select.option', '', '-'.JText::_('FLEXI_ALL').'-');
-		foreach ($listarrays as $listarray) {
-			$options[] = JHTML::_('select.option', $listarray[0], $listarray[1]); 
-			}			
-			
+		foreach ($elements as $val => $title) {
+			$options[] = JHTML::_('select.option', $val, $title); 
+		}
+		
 		$filter->html	= JHTML::_('select.genericlist', $options, 'filter_'.$filter->id, ' class="fc_field_filter" onchange="document.getElementById(\''.$formName.'\').submit();"', 'value', 'text', $value);
 	}
 	
@@ -277,14 +295,17 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 	// VARIOUS HELPER METHODS
 	// **********************
 	
-	private function prepare($field_elements)
+	private function parseElements(&$field, &$field_elements)
 	{
-		$listelements = array_map('trim', explode('::', $field_elements));
-		$items = $matches = array();
+		static $elements_arr = array();
+		if (isset($elements_arr[$field->id])) return $elements_arr[$field->id];
+		
+		$listelements = array_map('trim', preg_split('/\s*::\s*/', $field_elements));
+		$elements = $matches = array();
 		foreach($listelements as $listelement)
 		{
 			preg_match("/\[(.*)\]/i", $listelement, $matches);
-			$name = trim(preg_replace("/\[(.*)\]/i", '', $listelement));
+			$name = trim(preg_replace("/\s*\[(.*)\]\s*/i", '', $listelement));
 			if(isset($matches[1]))
 			{
 				$attribs	  = array();
@@ -296,15 +317,16 @@ class plgFlexicontent_fieldsLinkslist extends JPlugin
 					if(!isset($parts[$i+1])) continue;
 					$attribs[trim($parts[$i])] = $parts[$i+1];
 				}
-				$items[$name] = array_merge($this->_attribs, $attribs);
+				$elements[$name] = array_merge($this->_attribs, $attribs);
 			}
 			else
 			{
-				$items[$name] = $this->_attribs;
+				$elements[$name] = $this->_attribs;
 			}
 		}
 		
-		return $items;
+		$elements_arr[$field->id] = $elements;
+		return $elements;
 	}	
 	
 	

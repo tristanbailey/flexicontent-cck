@@ -17,7 +17,6 @@
  */
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
-jimport( 'joomla.html.parameter' );
 
 $params =  $this->params;
 $db     =  JFactory::getDBO();
@@ -72,7 +71,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 <?php
 if (JRequest::getCmd('print')) {
 	if ($this->params->get('print_behaviour', 'auto') == 'auto') : ?>
-		<script type="text/javascript">window.addEvent('domready', function() { window.print(); });</script>
+		<script type="text/javascript">jQuery(document).ready(function(){ window.print(); });</script>
 	<?php	elseif ($this->params->get('print_behaviour') == 'button') : ?>
 		<input type='button' id='printBtn' name='printBtn' value='<?php echo JText::_('Print');?>' class='btn btn-info' onclick='this.style.display="none"; window.print(); return false;'>
 	<?php endif;
@@ -82,11 +81,11 @@ if (JRequest::getCmd('print')) {
 	$printbutton = flexicontent_html::printbutton( $this->print_link, $this->params );
 	if ($pdfbutton || $mailbutton || $printbutton) {
 	?>
-	<p class="buttons">
+	<div class="buttons">
 		<?php echo $pdfbutton; ?>
 		<?php echo $mailbutton; ?>
 		<?php echo $printbutton; ?>
-	</p>
+	</div>
 	<?php }
 }
 ?>
@@ -102,7 +101,12 @@ if (JRequest::getCmd('print')) {
 	</h2>
 <?php endif; ?>
 
-<?php if (!count($this->items)) : ?>
+
+<?php
+$items	= & $this->items;
+?>
+
+<?php if (!count($items)) : ?>
 
 	<div class="note">
 		<?php echo JText::_( 'FLEXI_NO_FAVOURED_ITEMS_INFO' ); ?>
@@ -111,22 +115,26 @@ if (JRequest::getCmd('print')) {
 <?php else : ?>
 
 <?php
-if ($use_fields && count($fields)) {
-	foreach ($this->items as $i => $item) {
-		foreach ($fields as $fieldname) {
-			// IMPORTANT: below we must use $this->items[$i], and not $item, otherwise joomla will not cache value !!!
-			FlexicontentFields::getFieldDisplay($this->items[$i], $fieldname, $values=null, $method='display');
-			if ( !empty($this->items[$i]->fields[$fieldname]->display) )  $found_fields[$fieldname] = 1;
+	$_read_more_about = JText::_( 'FLEXI_READ_MORE_ABOUT' );
+	$tooltip_class = FLEXI_J30GE ? 'hasTooltip' : 'hasTip';
+	
+	unset($item);  // just in case there is reference
+	if ($use_fields && count($fields)) {
+		foreach ($items as $i => $item) {
+			foreach ($fields as $fieldname) {
+				// IMPORTANT: below we must use $items[$i], and not $item, otherwise joomla will not cache value !!!
+				FlexicontentFields::getFieldDisplay($items[$i], $fieldname, $values=null, $method='display');
+				if ( !empty($items[$i]->fields[$fieldname]->display) )  $found_fields[$fieldname] = 1;
+			}
 		}
 	}
-}
 ?>
 
-<form action="<?php echo $this->action; ?>" method="POST" id="adminForm" name="adminForm" onsubmit="">
+<form action="<?php echo $this->action; ?>" method="post" name="adminForm" id="adminForm">
 
 <?php
-	$this->params->set('use_filters',0);  // Currently not supported by the view, disable it
-	$this->params->set('show_alpha',0);   // Currently not supported by the view, disable it
+	// Filtering form features not supported, will have been disabled in the view.htmnl.php
+	// this is needed since some of these, when parameter is not set, are defaulting to 'yes'
 	
 	// Body of form for (a) Text search, Field Filters, Alpha-Index, Items Total Statistics, Selectors(e.g. per page, orderby)
 	// If customizing via CSS rules or JS scripts is not enough, then please copy the following file here to customize the HTML too
@@ -134,13 +142,13 @@ if ($use_fields && count($fields)) {
 ?>
 
 <input type="hidden" name="option" value="com_flexicontent" />
-<input type="hidden" name="filter_order" value="<?php echo $this->lists['filter_order']; ?>" />
-<input type="hidden" name="filter_order_Dir" value="" />
+<input type="hidden" id="filter_order" name="filter_order" value="<?php echo $this->lists['filter_order']; ?>" />
+<input type="hidden" id="filter_order_Dir" name="filter_order_Dir" value="" />
 <input type="hidden" name="view" value="favourites" />
 <input type="hidden" name="task" value="" />
 </form>
 
-<table class="flexitable" width="100%" border="0" cellspacing="0" cellpadding="0" summary="<?php echo JText::_( 'FLEXI_YOUR_FAVOURED_ITEMS' ).' '; ?>">
+<table id="flexitable" class="flexitable">
 	<thead>
 		<tr>
 			<?php if ($use_image) : ?>
@@ -154,14 +162,14 @@ if ($use_fields && count($fields)) {
 			<?php if ($use_fields && count($fields)) : ?>
 				<?php foreach ($fields as $fieldname) : ?>
 					<?php	if ( empty($found_fields[$fieldname]) ) continue; ?>
-					<th id="fc_<?php echo $fieldname; ?>" ><?php echo $this->items[0]->fields[$fieldname]->label; ?></th>
+					<th id="fc_<?php echo $fieldname; ?>" ><?php echo $items[0]->fields[$fieldname]->label; ?></th>
 				<?php endforeach; ?>
 			<?php endif; ?>
 		</tr>
 	</thead>
 	<tbody>	
 	<?php
-	foreach ($this->items as $i => $item) :
+	foreach ($items as $i => $item) :
 		if ($use_image) {
 			$src = '';
 			$thumb = '';
@@ -185,10 +193,11 @@ if ($use_fields && count($fields)) {
 				$w		= '&amp;w=' . $image_width;
 				$aoe	= '&amp;aoe=1';
 				$q		= '&amp;q=95';
+				$ar 	= '&amp;ar=x';
 				$zc		= $image_method ? '&amp;zc=' . $image_method : '';
-				$ext = pathinfo($src, PATHINFO_EXTENSION);
+				$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 				$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-				$conf	= $w . $h . $aoe . $q . $zc . $f;
+				$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 				
 				$base_url = (!preg_match("#^http|^https|^ftp|^/#i", $src)) ?  JURI::base(true).'/' : '';
 				$thumb = JURI::base(true).'/components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$base_url.$src.$conf;
@@ -219,15 +228,16 @@ if ($use_fields && count($fields)) {
 	?>
 		<tr id="tablelist_item_<?php echo $i; ?>" class="<?php echo $fc_item_classes; ?>">
 		<?php if ($use_image) : ?>
-			<td headers="fc_image" align="center">
+			<td headers="fc_image">
 				<?php if (!empty($thumb)) : ?>
 				
+					<?php $title_encoded = htmlspecialchars($item->title, ENT_COMPAT, 'UTF-8'); ?>
 					<?php if ($this->params->get('link_image', 1)) { ?>
-						<a href="<?php echo $item_link; ?>" class="hasTip" title="<?php echo JText::_( 'FLEXI_READ_MORE_ABOUT' ) . '::' . htmlspecialchars($item->title, ENT_COMPAT, 'UTF-8'); ?>">
-							<img src="<?php echo $thumb; ?>" />
+						<a href="<?php echo $item_link; ?>" >
+							<img src="<?php echo $thumb; ?>" alt="<?php echo $title_encoded; ?>" class="<?php echo $tooltip_class;?>" title="<?php echo flexicontent_html::getToolTip($_read_more_about, $title_encoded, 0, 0); ?>"/>
 						</a>
 					<?php } else { ?>
-						<img src="<?php echo $thumb; ?>" />
+						<img src="<?php echo $thumb; ?>" alt="<?php echo $title_encoded; ?>" title="<?php echo $title_encoded; ?>" />
 					<?php } ?>
 					
 				<?php else : ?>
@@ -236,10 +246,12 @@ if ($use_fields && count($fields)) {
 			</td>
 		<?php endif; ?>
 			<td headers="fc_title">
-				<a href="<?php echo $item_link; ?>"><?php echo $this->escape($item->title); ?></a>
+				<a href="<?php echo $item_link; ?>">
+					<?php echo $this->escape($item->title); ?>
+				</a>
 				<?php echo $markup_tags; ?>
 			</td>
-			<td headers="fc_intro">
+			<td headers="fc_desc">
 				<?php echo flexicontent_html::striptagsandcut( $item->introtext, 150 ); ?>
 			</td>
 		<?php if ($use_date) : ?>
@@ -251,7 +263,7 @@ if ($use_fields && count($fields)) {
 		<?php if ($use_fields && count($fields)) : ?>
 			<?php foreach ($fields as $fieldname) : ?>
 				<?php	if ( empty($found_fields[$fieldname]) ) continue; ?>
-				<td headers="fc_<?php echo $item->fields[$fieldname]->name; ?>" ><?php echo $item->fields[$fieldname]->display; ?></th>
+				<td headers="fc_<?php echo $item->fields[$fieldname]->name; ?>" ><?php echo $item->fields[$fieldname]->display; ?></td>
 			<?php endforeach; ?>
 		<?php endif; ?>
 		

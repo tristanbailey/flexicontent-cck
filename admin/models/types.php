@@ -19,7 +19,8 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.modellist');
+jimport('legacy.model.list');
+use Joomla\String\StringHelper;
 
 /**
  * FLEXIcontent Component types Model
@@ -66,15 +67,95 @@ class FlexicontentModelTypes extends JModelList
 	function __construct()
 	{
 		parent::__construct();
-
+		
 		$app    = JFactory::getApplication();
-		$option = JRequest::getVar('option');
-
-		$limit      = $app->getUserStateFromRequest( $option.'.types.limit', 'limit', $app->getCfg('list_limit'), 'int');
-		$limitstart = $app->getUserStateFromRequest( $option.'.types.limitstart', 'limitstart', 0, 'int' );
-
+		$jinput = $app->input;
+		$option = $jinput->get('option', '', 'cmd');
+		$view   = $jinput->get('view', '', 'cmd');
+		$fcform = $jinput->get('fcform', 0, 'int');
+		$p      = $option.'.'.$view.'.';
+		
+		
+		
+		// ****************************************
+		// Ordering: filter_order, filter_order_Dir
+		// ****************************************
+		
+		$default_order     = 't.name';
+		$default_order_dir = 'ASC';
+		
+		$filter_order      = $fcform ? $jinput->get('filter_order',     $default_order,      'cmd')  :  $app->getUserStateFromRequest( $p.'filter_order',     'filter_order',     $default_order,      'cmd' );
+		$filter_order_Dir  = $fcform ? $jinput->get('filter_order_Dir', $default_order_dir, 'word')  :  $app->getUserStateFromRequest( $p.'filter_order_Dir', 'filter_order_Dir', $default_order_dir, 'word' );
+		
+		if (!$filter_order)     $filter_order     = $default_order;
+		if (!$filter_order_Dir) $filter_order_Dir = $default_order_dir;
+		
+		$this->setState('filter_order', $filter_order);
+		$this->setState('filter_order_Dir', $filter_order_Dir);
+		
+		$app->setUserState($p.'filter_order', $filter_order);
+		$app->setUserState($p.'filter_order_Dir', $filter_order_Dir);
+		
+		
+		
+		// **************
+		// view's Filters
+		// **************
+		
+		// Various filters
+		$filter_state    = $fcform ? $jinput->get('filter_state',    '', 'string')  :  $app->getUserStateFromRequest( $p.'filter_state',    'filter_state',   '', 'string' );   // we may check for '*', so string filter
+		$filter_access   = $fcform ? $jinput->get('filter_access',   '', 'int')     :  $app->getUserStateFromRequest( $p.'filter_access',   'filter_access',  '', 'int' );
+		
+		$this->setState('filter_state', $filter_state);
+		$this->setState('filter_access', $filter_access);
+		
+		$app->setUserState($p.'filter_state', $filter_state);
+		$app->setUserState($p.'filter_access', $filter_access);
+		
+		
+		// Text search
+		$search = $fcform ? $jinput->get('search', '', 'string')  :  $app->getUserStateFromRequest( $p.'search',  'search',  '',  'string' );
+		$this->setState('search', $search);
+		$app->setUserState($p.'search', $search);
+		
+		
+		
+		// *****************************
+		// Pagination: limit, limitstart
+		// *****************************
+		
+		$limit      = $fcform ? $jinput->get('limit', $app->getCfg('list_limit'), 'int')  :  $app->getUserStateFromRequest( $p.'limit', 'limit', $app->getCfg('list_limit'), 'int');
+		$limitstart = $fcform ? $jinput->get('limitstart',                     0, 'int')  :  $app->getUserStateFromRequest( $p.'limitstart', 'limitstart', 0, 'int' );
+		
+		// In case limit has been changed, adjust limitstart accordingly
+		$limitstart = ( $limit != 0 ? (floor($limitstart / $limit) * $limit) : 0 );
+		$jinput->set( 'limitstart',	$limitstart );
+		
 		$this->setState('limit', $limit);
 		$this->setState('limitstart', $limitstart);
+		
+		$app->setUserState($p.'limit', $limit);
+		$app->setUserState($p.'limitstart', $limitstart);
+		
+		
+		// For some model function that use single id
+		$array = $jinput->get('cid', array(0), 'array');
+		$this->setId((int)$array[0]);
+	}
+	
+	
+	/**
+	 * Method to set the Field identifier
+	 *
+	 * @access	public
+	 * @param	int Field identifier
+	 */
+	function setId($id)
+	{
+		// Set id and wipe data
+		$this->_id	 = $id;
+		$this->_data = null;
+		$this->_total= null;
 	}
 	
 	
@@ -87,19 +168,23 @@ class FlexicontentModelTypes extends JModelList
 	 */
 	function getListQuery()
 	{
-		// Get the WHERE, HAVING and ORDER BY clauses for the query
-		$app    = JFactory::getApplication();
+		// Create a query with all its clauses: WHERE, HAVING and ORDER BY, etc
+		$app  = JFactory::getApplication();
+		$db   = JFactory::getDBO();
 		$option = JRequest::getVar('option');
-		$db = JFactory::getDBO();
-		$query = $db->getQuery(true);
-
-		$filter_state = $app->getUserStateFromRequest( $option.'.types.filter_state', 'filter_state', '', 'word' );
-		$search = $app->getUserStateFromRequest( $option.'.types.search', 'search', '', 'string' );
-		$search = trim( JString::strtolower( $search ) );
+		$view   = JRequest::getVar('view');
 		
-		$filter_order     = $app->getUserStateFromRequest( $option.'.types.filter_order', 		'filter_order', 	't.name', 'cmd' );
-		$filter_order_Dir = $app->getUserStateFromRequest( $option.'.types.filter_order_Dir',	'filter_order_Dir',	'ASC', 'word' );
-
+		$filter_order     = $this->getState( 'filter_order' );
+		$filter_order_Dir	= $this->getState( 'filter_order_Dir' );
+		$filter_state     = $this->getState( 'filter_state' );
+		$filter_access    = $this->getState( 'filter_access' );
+		
+		// text search
+		$search  = $this->getState( 'search' );
+		$search  = StringHelper::trim( StringHelper::strtolower( $search ) );
+		
+		// Create a new query object.
+		$query = $db->getQuery(true);
 		// Select the required fields from the table.
 		$query->select(
 			$this->getState(
@@ -117,15 +202,22 @@ class FlexicontentModelTypes extends JModelList
 		$query->join('LEFT', '#__users AS u ON u.id = t.checked_out');
 		$query->group('t.id');
 		
+		// Filter by state
 		if ( $filter_state ) {
 			if ( $filter_state == 'P' ) {
 				$query->where('t.published = 1');
 			} else if ($filter_state == 'U' ) {
 				$query->where('t.published = 0');
-			}
+			} // else ALL: published & unpublished (in future we may have more states, e.g. archived, trashed)
 		}
-
-		if ($search) {
+		
+		// Filter by access level
+		if ( $filter_access ) {
+			$query->where('t.access = '.(int) $filter_access);
+		}
+		
+		// Filter by search word
+		if (strlen($search)) {
 			$query->where('LOWER(t.name) LIKE '.$this->_db->Quote( '%'.$this->_db->escape( $search, true ).'%', false ));
 		}
 		$query->order($filter_order.' '.$filter_order_Dir);
@@ -134,33 +226,7 @@ class FlexicontentModelTypes extends JModelList
 		return $query;
 	}
 	
-	/**
-	 * Method to build the having clause of the query for the files
-	 *
-	 * @access private
-	 * @return string
-	 * @since 1.0
-	 */
-	function _buildContentHaving()
-	{
-		$app    = JFactory::getApplication();
-		$option = JRequest::getVar('option');
-		
-		$filter_assigned = $app->getUserStateFromRequest( $option.'.types.filter_assigned', 'filter_assigned', '', 'word' );
-		
-		$having = '';
-		
-		if ( $filter_assigned ) {
-			if ( $filter_assigned == 'O' ) {
-				$having = ' HAVING COUNT(rel.tid) = 0';
-			} else if ($filter_assigned == 'A' ) {
-				$having = ' HAVING COUNT(rel.tid) > 0';
-			}
-		}
-		
-		return $having;
-	}
-
+	
 	/**
 	 * Method to (un)publish a type
 	 *
@@ -182,7 +248,7 @@ class FlexicontentModelTypes extends JModelList
 				. ' AND ( checked_out = 0 OR ( checked_out = ' . (int) $user->get('id'). ' ) )'
 			;
 			$this->_db->setQuery( $query );
-			if (!$this->_db->query()) {
+			if (!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -238,7 +304,7 @@ class FlexicontentModelTypes extends JModelList
 					. ' WHERE id IN ('. $cids .')'
 					;
 			$this->_db->setQuery( $query );
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -248,7 +314,7 @@ class FlexicontentModelTypes extends JModelList
 					. ' WHERE type_id IN ('. $cids .')'
 					;
 			$this->_db->setQuery( $query );
-			if(!$this->_db->query()) {
+			if(!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -287,7 +353,7 @@ class FlexicontentModelTypes extends JModelList
 				foreach ($rels as $rel) {
 					$query = 'INSERT INTO #__flexicontent_fields_type_relations (`field_id`, `type_id`, `ordering`) VALUES(' . (int)$rel->field_id . ',' . $type->id . ',' . (int)$rel->ordering . ')';
 					$this->_db->setQuery($query);
-					$this->_db->query();
+					$this->_db->execute();
 				}
 			}
 			return true;

@@ -19,19 +19,22 @@
 // Check to ensure this file is included in Joomla!
 defined('_JEXEC') or die('Restricted access');
 
+// Load the helper classes
+if (!defined('DS'))  define('DS',DIRECTORY_SEPARATOR);
+require_once(JPATH_ROOT.DS.'components'.DS.'com_flexicontent'.DS.'classes'.DS.'flexicontent.helper.php');
+
+jimport('cms.html.html');      // JHtml
+
+jimport('joomla.form.helper'); // JFormHelper
+JFormHelper::loadFieldClass('spacer');   // JFormFieldSpacer
+
 /**
- * Renders a fields element
+ * Renders the flexicontent 'separator' (header) element
  *
  * @package 	Joomla
  * @subpackage	FLEXIcontent
  * @since		1.5
  */
-if (FLEXI_J16GE) {
-	jimport('joomla.form.helper');
-	JFormHelper::loadFieldClass('spacer');
-}
-
-
 class JFormFieldSeparator extends JFormFieldSpacer
 {
 	/**
@@ -40,215 +43,159 @@ class JFormFieldSeparator extends JFormFieldSpacer
 	 * @var		string
 	 */
 	var	$_name = 'separator';
+	
+	static $css_js_added = null;
+	static $tab_css_js_added = null;
 		
-	function add_css_js() {
-		$css="
-		div.pane-sliders ul.adminformlist li label.hasTip {
-			display:inline-block; padding: 4px; margin: 1px 6px 0px 1px; text-align: right;	width:132px; font-weight: bold;
-			background-color: #F6F6F6; border-bottom: 1px solid #E9E9E9; border-right: 1px solid #E9E9E9; color: #666666;
-		}
-		div.pane-sliders ul.adminformlist li ul#rules label.hasTip {
-			display:inherit; padding: inherit; margin: inherit; text-align: inherit;	width: inherit; font-weight: inherit;
-			background-color: inherit; border-width: 0px; color: inherit;
-		}
-		div.pane-sliders ul.adminformlist li select { margin-bottom: 0px;}
-		div.pane-sliders ul.adminformlist li fieldset  { margin: 0; padding: 0; }
-		
-		div.current ul.config-option-list li .fcsep_level3 {
-			left: 232px !important;
-		}
-		div.control-group div.control-label label.hasTooltip,
-		div.current ul.config-option-list li label.hasTooltip,
-		div.current ul.config-option-list li label.hasTip {
-			display:inline-block; padding: 4px; margin: 1px 6px 0px 1px; text-align: right;	width:220px; font-weight: normal; font-size: 12px;
-			background-color: #F6F6F6; border-bottom: 1px solid #E9E9E9; border-right: 1px solid #E9E9E9; color: #666666;
-		}
-		div.current ul.config-option-list li ul#rules label.hasTip {
-			display:inherit; padding: inherit; margin: inherit; text-align: inherit;	width: inherit; font-weight: inherit;
-			background-color: inherit; border-width: 0px; color: inherit;
-		}
-		form#item-form div.pane-sliders ul.adminformlist li label.hasTip {
-			display:inline-block; padding: 4px; margin: 1px 6px 0px 1px; text-align: right;	width:160px; font-weight: bold;
-			background-color: #F6F6F6; border-bottom: 1px solid #E9E9E9; border-right: 1px solid #E9E9E9; color: #666666;
-		}
-		
-		/*div.current fieldset.radio label {
-			min-width:10px!important; padding: 0px 16px 0px 0px!important; margin: 2px 0px 0px 1px!important;
-		}
-		div fieldset.adminform fieldset.radio label, div fieldset.panelform fieldset.radio label {
-			min-width:10px!important; padding: 0px 10px 0px 0px!important; margin: 4px 0px 0px 1px!important;
-		}*/
-		
-		div fieldset input, div fieldset textarea, div fieldset img, div fieldset button { margin:5px 2px 2px 0px; }
-		div fieldset select { margin:0px; }
-					
-		div.current ul.config-option-list li select { margin-bottom: 0px; font-size:12px;}
-		div.current ul.config-option-list li fieldset  { margin: 0; padding: 0; }
-		
-		.tool-tip { }
-		.tip-title { }
-		";
-		
+	function add_css_js()
+	{
+		self::$css_js_added = true;
+
 		$document = JFactory::getDocument();
-		$document->addStyleDeclaration($css);
-		$document->addStyleSheet(JURI::root().'components/com_flexicontent/assets/css/flexi_form.css');
-		
-		// WORKAROUNDs of for 2 issues in com_config: slow chosen JS and PHP 5.3.9+ 'max_input_vars' limit
-		if (FLEXI_J30GE) $jinput = JFactory::getApplication()->input;
-		$option = FLEXI_J30GE ? $jinput->get('option', '', 'string') : JRequest::getVar('option');
-		$view   = FLEXI_J30GE ? $jinput->get('view', '', 'string') : JRequest::getVar('view');
-		$controller = FLEXI_J30GE ? $jinput->get('controller', '', 'string') : JRequest::getVar('controller');
-		$component  = FLEXI_J30GE ? $jinput->get('component', '', 'string')  : JRequest::getVar('component');
-		
-		//if ($option=='com_config' || $option=='com_menus' || $option=='com_modules') {
-		$document->addStyleSheet(JURI::root().'components/com_flexicontent/assets/css/flexi_shared.css');
-		//}
-		
-		$js = '';
-		if ($option=='com_config' && ($view == 'component' || $controller='component') && $component == 'com_flexicontent') {
-			$document->addStyleSheet(JURI::root().'components/com_flexicontent/assets/css/tabber.css');
-			$document->addScript(JURI::root().'components/com_flexicontent/assets/js/tabber-minimized.js');
-			$document->addScriptDeclaration(' document.write(\'<style type="text/css">.fctabber{display:none;}<\/style>\'); ');
-			
-			if (FLEXI_J30GE) {
-				// Make sure chosen JS file is loaded before our code
-				JHtml::_('formbehavior.chosen', '#_some_iiidddd_');
-				// replace chosen function
-				$js .= "
-					jQuery.fn.chosen = function(){};
-				";
-			}
-			
-			if (FLEXI_J16GE) {
-				/*$js .= "
-					function fc_prepare_config_form(){
-						jQuery('#jform_fcdata_serialized').val( '' );
-						jQuery('#jform_fcdata_serialized').val( JSON.stringify(jQuery('#component-form').serializeArray()) );
-						jQuery('#component-form select').attr('disabled', true);
-						jQuery('#component-form textarea').attr('disabled', true);
-						jQuery('#component-form input[type=text], #component-form input[type=checkbox], #component-form input[type=radio]').attr('disabled', true);
-					}
-					jQuery(document).ready(function() {
-						jQuery('#component-form').attr('onsubmit', \"fc_prepare_config_form();\");
-					})
-				";*/
-			}
+		$jinput = JFactory::getApplication()->input;
+		$option = $jinput->get('option', '', 'cmd');
+
+		// NOTE: this is imported by main Frontend/Backend CSS file, so import these only if it is not a flexicontent view
+		if ($option!='com_flexicontent')
+		{
+			$css = "";
+			if ($css) $document->addStyleDeclaration($css);
+
+			JFactory::getApplication()->isSite() ?
+				$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH) :
+				$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+			$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+
+			// Add flexicontent specific TABBing to non-flexicontent views
+			$this->add_tab_css_js();
 		}
-		if ($js) $document->addScriptDeclaration($js);
+
+		JHtml::_('behavior.framework', true);
+		flexicontent_html::loadJQuery();
+
+		// Add js function to overload the joomla submitform validation
+		JHTML::_('behavior.formvalidation');  // load default validation JS to make sure it is overriden
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/admin.js', FLEXI_VHASH);
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/validate.js', FLEXI_VHASH);
+	}
+
+
+	function add_tab_css_js()
+	{
+		self::$tab_css_js_added = true;
+		$document = JFactory::getDocument();
 		
-		if (FLEXI_J16GE) {
-			require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'classes'.DS.'flexicontent.helper.php');
-			FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
-			flexicontent_html::loadJQuery();
-			$document->addScript(JURI::root().'components/com_flexicontent/assets/js/admin.js');
-			$document->addScript(JURI::root().'components/com_flexicontent/assets/js/validate.js');
-			//if (!FLEXI_J30GE)  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-			if (FLEXI_J30GE)  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		}
+		// Load JS tabber lib
+		$document->addScriptVersion(JURI::root(true).'/components/com_flexicontent/assets/js/tabber-minimized.js', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::root(true).'/components/com_flexicontent/assets/css/tabber.css', FLEXI_VHASH);
+		$document->addScriptDeclaration(' document.write(\'<style type="text/css">.fctabber{display:none;}<\/style>\'); ');  // temporarily hide the tabbers until javascript runs
 	}
-	
-	
-	function getLabel() {
-		return "";
+
+
+	function getLabel()
+	{
+		return '';
 	}
-	
+
+
 	function getInput()
 	{
-		static $js_css_added = null;
-		if ($js_css_added===null) {
+		static $tabset_id = 0;
+		static $tab_id;
+
+		if (self::$css_js_added===null)
+		{
 			$this->add_css_js();
-			$js_css_added = true;
 		}
 		
-		if (FLEXI_J16GE) {
-			$node = & $this->element;
-			$attributes = get_object_vars($node->attributes());
-			$attributes = $attributes['@attributes'];
-		} else {
-			$attributes = & $node->_attributes;
-		}
-		$level = $attributes['level'];
+		$node = & $this->element;
+		$attributes = get_object_vars($node->attributes());
+		$attributes = $attributes['@attributes'];
+		
+		$value = $this->element['default'];
 		$description = @$attributes['description'];
-		$initial_tbl_hidden = @$attributes['initial_tbl_hidden'];
-		$value = FLEXI_J16GE ? $this->element['default'] : $value;
+		$value_printf = @$attributes['value_printf'];
+
+		$level = @$attributes['level'];
+		$classes = @$attributes['class'];
+		$style = @$attributes['style'];
 		
-		if (FLEXI_J16GE && in_array($level, array('tblbreak','tabs_start','tab_open','tab_close','tabs_end')) ) return 'do no use type "'.$level.'" in J1.6+';
+		$tab_class = @$attributes['tab_class'] ? $attributes['tab_class'] : 's-gray';
 		
-		static $tab_js_css_added = false;
-		
-		if ($level == 'tblbreak') {
-			$style = '';
-/*
-		} else if ($level == 'level1') {
-			$style = '';
-		} else if ($level == 'level2') {
-			$pos_left   = FLEXI_J16GE ? 'left:4%;' : 'left:2%;';
-			$width_vals = FLEXI_J16GE ? 'width:86%;' : 'width:91%;';
-			$style = ''.$pos_left.$width_vals;
-		} else if ($level == 'level3') {
-			$pos_left = FLEXI_J16GE ? 'left:144px;' : 'left:4%;';
-			$style = ''.$pos_left;
-*/
-		} else {
-			$style = '';
+		if (self::$tab_css_js_added===null && $level=='tabset_start')
+		{
+			$this->add_tab_css_js();
 		}
-		
-		$class = 'fcsep_'.$level; $title = "";
-		if ($description) {
-			$class .= FLEXI_J30GE ? " hasTooltip" : " hasTip";
-			$title = JText::_($value)."::".JText::_($description);
+
+		$is_level = substr($level, 0, 5)=='level';
+		$classes .= $is_level ? ' fcsep_'.$level : '';
+
+		$tip = '';
+		if (!$value_printf)
+		{
+			$title = JText::_($value);
 		}
-		
-		if ($level == 'tabs_start') {
-			$html = '';
-			if (!empty($initial_tbl_hidden)) {
-				$initial_tbl_hidden = true;
-				$html = '<style> table.paramlist.admintable {display:none;} table.paramlist.admintable.flexi {display:table;} div.tabberlive {margin-top:0px;}</style>';
+		else
+		{
+			$vparts = preg_split("/\s*,\s*/", $value_printf);
+			foreach($vparts as & $vpart)
+			{
+				$vpart = JText::_($vpart);
 			}
-			return $html.'
-			</td></tr>
-			</table>
-			<div class="fctabber">
-				<div class="tabbertab">
-					<h3 class="tabberheading">'.str_replace('&', ' - ', JText::_($value)).'</h3>
-					<table width="100%" cellspacing="1" class="paramlist admintable flexi">
-					<tr><td>
-			';
-		} else if ($level == 'tab_close_open') {
-			return '
-					</td></tr>
-					</table>
-				</div>
-				<div class="tabbertab">
-					<h3 class="tabberheading">'.str_replace('&', ' - ', JText::_($value)).'</h3>
-					<table width="100%" cellspacing="1" class="paramlist admintable flexi">
-					<tr><td>
-				';
-		} else if ($level == 'tabs_end') {
-			return'
-					</td></tr>
-					</table>
-				</div>
-			</div>
-				<table width="100%" cellspacing="1" class="paramlist admintable flexi">
-				<tr><td>
-			';
-		} else if ($level == 'tblbreak') {
-			return '
-			</td></tr>
-			</table>
-			'
-			.'<span style="'.$style.'" class="'.$class.'" title="'.$title.'" >'.JText::_($value).'</span>'.
-			'
-			<table width="100%" cellspacing="1" class="paramlist admintable flexi">
-			<tr><td>
-			';
+			unset($vpart);
+			array_unshift($vparts, $value);
+			$title = call_user_func_array(array('JText', 'sprintf'), $vparts);
 		}
-		$pad = '';
-		if ($level=='level0') $pad .= ' ';
-		else if ($level=='level1') $pad .= ' &nbsp; ';
-		else if ($level=='level2') $pad .= ' &nbsp; &nbsp; ';
-		else if ($level=='level3') $pad .= '';
-		return '<div class="fcclear clear"> </div> <div style="'.$style.'" class="'.$class.'" title="'.$title.'" >'.$pad.JText::_($value).'</div>';
+		$desc = JText::_($description);
+		if ($desc)
+		{
+			$classes .= ' hasTooltip';
+			$tip = 'title="'.flexicontent_html::getToolTip($title, $desc, 0, 1).'"';
+		}
+		$icon_class = @$attributes['icon_class'];
+		
+		$box_count = (int) @ $attributes['remove_boxes'];
+		$_bof = $box_count ? ($box_count == 2 ? '</div></div>' : str_repeat("</div>", $box_count)) : '';
+		$_eof = $box_count ? ($box_count == 2 ? '<div class="fc_empty_box"><div>'   : str_repeat("<div>",  $box_count)) : '';
+
+		$box_type = @$attributes['box_type'];
+		if (!$is_level) switch ($level)
+		{
+		case 'hidden_field':
+			return '<input type="text" id="'. @$attributes['hidden_field_id'].'" name="'. @$attributes['hidden_field_id'].'" value="1" class="fc_hidden_value" />';
+			break;
+		case 'tabset_start':
+			$tab_id = 0;
+			if ($box_type==2)
+				return $_bof . JHtml::_('tabs.start','core-tabs-cat-props-'.($tabset_id++), array('useCookie'=>1)) . $_eof;
+			else
+				return $_bof . "\n". '<div class="fctabber '.$tab_class.' '.$classes.'" id="tabset_attrs_'.($tabset_id++).'">' . $_eof;
+			break;
+
+		case 'tabset_close':
+			if ($box_type==2)
+				return $_bof . JHtml::_('tabs.end') . $_eof;
+			else
+			return $_bof . '
+				</div>
+			</div>' . $_eof;
+			break;
+
+		case 'tab_open':
+			if ($box_type==2)
+				return $_bof . JHtml::_('tabs.panel', $title, 'tab_attrs_'.$tabset_id.'_'.($tab_id++)) . $_eof;
+			return $_bof . ($tab_id > 0 ? '
+				</div>' : '').'
+				<div class="tabbertab" id="tab_attrs_'.$tabset_id.'_'.($tab_id++).'" data-icon-class="'.$icon_class.'" >
+					<h3 class="tabberheading '.$classes.'" '.$tip.'>'.$title.'</h3>
+				' . $_eof;
+			break;
+
+		default:
+			// Will be handled after switch
+			break;
+		}
+
+		return $_bof . '<div style="'.$style.'" class="'.$classes.'" '.$tip.' >'.$title.'</div><div class="fcclear"></div>' . $_eof;
 	}
 }

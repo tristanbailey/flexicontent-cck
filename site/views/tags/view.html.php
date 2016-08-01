@@ -19,7 +19,7 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * HTML View class for the Tags View
@@ -64,29 +64,37 @@ class FlexicontentViewTags extends JViewLegacy
 		$items   = $this->get('Data');
 		$total   = $this->get('Total');
 		
-		// Make sure field values were retrieved e.g. we need 'item->categories' for template classes
+		
+		// ****************************************************************************************************************
+		// Bind Fields to items and RENDER their display HTML, but check for document type, due to Joomla issue with system
+		// plugins creating JDocument in early events forcing it to be wrong type, when format as url suffix is enabled
+		// ****************************************************************************************************************
+		
 		$items 	= FlexicontentFields::getFields($items, $view, $params);
 		
+		
+		// ************************************************************************
 		// Calculate CSS classes needed to add special styling markups to the items
+		// ************************************************************************
+		
 		flexicontent_html::calculateItemMarkups($items, $params);
 		
 		
 		// ********************************
 		// Load needed JS libs & CSS styles
 		// ********************************
-		FLEXI_J30GE ? JHtml::_('behavior.framework', true) : JHTML::_('behavior.mootools');
+		
+		JHtml::_('behavior.framework', true);
 		flexicontent_html::loadFramework('jQuery');
 		flexicontent_html::loadFramework('flexi_tmpl_common');
 		
-		//add css file
+		// Add css files to the document <head> section (also load CSS joomla template override)
 		if (!$params->get('disablecss', '')) {
-			$document->addStyleSheet($this->baseurl.'/components/com_flexicontent/assets/css/flexicontent.css');
-			$document->addCustomTag('<!--[if IE]><style type="text/css">.floattext {zoom:1;}</style><![endif]-->');
+			$document->addStyleSheetVersion($this->baseurl.'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH);
+			//$document->addCustomTag('<!--[if IE]><style type="text/css">.floattext {zoom:1;}</style><![endif]-->');
 		}
-		
-		//allow css override
 		if (file_exists(JPATH_SITE.DS.'templates'.DS.$app->getTemplate().DS.'css'.DS.'flexicontent.css')) {
-			$document->addStyleSheet($this->baseurl.'/templates/'.$app->getTemplate().'/css/flexicontent.css');
+			$document->addStyleSheetVersion($this->baseurl.'/templates/'.$app->getTemplate().'/css/flexicontent.css', FLEXI_VHASH);
 		}
 		
 		
@@ -149,14 +157,13 @@ class FlexicontentViewTags extends JViewLegacy
 		// Use the page heading as document title, (already calculated above via 'appropriate' logic ...)
 		$doc_title = $params->get( 'page_title' );
 		
-		// Check and prepend or append site name
-		if (FLEXI_J16GE) {  // Not available in J1.5
-			// Add Site Name to page title
+		// Check and prepend or append site name to page title
+		if ( $doc_title != $app->getCfg('sitename') ) {
 			if ($app->getCfg('sitename_pagetitles', 0) == 1) {
-				$doc_title = $app->getCfg('sitename') ." - ". $doc_title ;
+				$doc_title = JText::sprintf('JPAGETITLE', $app->getCfg('sitename'), $doc_title);
 			}
 			elseif ($app->getCfg('sitename_pagetitles', 0) == 2) {
-				$doc_title = $doc_title ." - ". $app->getCfg('sitename') ;
+				$doc_title = JText::sprintf('JPAGETITLE', $doc_title, $app->getCfg('sitename'));
 			}
 		}
 		
@@ -173,31 +180,30 @@ class FlexicontentViewTags extends JViewLegacy
 		if (($_mp=$app_params->get('robots')))    $document->setMetadata('robots', $_mp);
 		
 		// Overwrite with menu META data if menu matched
-		if (FLEXI_J16GE) {
-			if ($menu_matches) {
-				if (($_mp=$menu->params->get('menu-meta_description')))  $document->setDescription( $_mp );
-				if (($_mp=$menu->params->get('menu-meta_keywords')))     $document->setMetadata('keywords', $_mp);
-				if (($_mp=$menu->params->get('robots')))                 $document->setMetadata('robots', $_mp);
-				if (($_mp=$menu->params->get('secure')))                 $document->setMetadata('secure', $_mp);
-			}
+		if ($menu_matches) {
+			if (($_mp=$menu->params->get('menu-meta_description')))  $document->setDescription( $_mp );
+			if (($_mp=$menu->params->get('menu-meta_keywords')))     $document->setMetadata('keywords', $_mp);
+			if (($_mp=$menu->params->get('robots')))                 $document->setMetadata('robots', $_mp);
+			if (($_mp=$menu->params->get('secure')))                 $document->setMetadata('secure', $_mp);
 		}
 		
 		
-		// ************************************
-		// Add rel canonical html head link tag (TODO: improve multi-page handing)
-		// ************************************
+		// **********************************************************************************************************
+		// Add canonical link (if needed and different than current URL), also preventing Joomla default (SEF plugin)
+		// **********************************************************************************************************
 		
-		$base  = $uri->getScheme() . '://' . $uri->getHost();
-		$start = JRequest::getVar('start', '');
-		$start = $start ? "&start=".$start : "";
-		$ucanonical = $base . JRoute::_(FlexicontentHelperRoute::getTagRoute($tag->id).$start);
-		if ($params->get('add_canonical')) {
-			$head_obj = $document->addHeadLink( $ucanonical, 'canonical', 'rel', '' );
-			$defaultCanonical = flexicontent_html::getDefaultCanonical();
-			if ( FLEXI_J30GE && $defaultCanonical != $ucanonical ) {
-				unset($head_obj->_links[$defaultCanonical]);
-			}
+		if ($params->get('add_canonical'))
+		{
+			// Create desired REL canonical URL
+			$start = JRequest::getInt('start', '');
+			$ucanonical = JRoute::_(FlexicontentHelperRoute::getTagRoute($tag->id).($start ? "&start=".$start : ''));
+			flexicontent_html::setRelCanonical($ucanonical);
 		}
+		
+		// Disable features, that are not supported by the view
+		$params->set('use_filters',0);
+		$params->set('show_alpha',0);
+		$params->set('clayout_switcher',0);
 		
 		//ordering
 		$filter_order		= JRequest::getCmd('filter_order', 'i.title');
@@ -209,15 +215,41 @@ class FlexicontentViewTags extends JViewLegacy
 		$lists['filter_order_Dir'] 	= $filter_order_Dir;
 		$lists['filter']			= $filter;
 		
+		
+		// ****************************
 		// Create the pagination object
+		// ****************************
+		
 		$pageNav = $this->get('pagination');
+		
+		// URL-encode filter values
+		$_revert = array('%21'=>'!', '%2A'=>'*', '%27'=>"'", '%28'=>'(', '%29'=>')');
+		foreach($_GET as $i => $v) {
+			if (substr($i, 0, 6) === "filter") {
+				if (is_array($v)) {
+					foreach($v as $ii => &$vv) {
+						$vv = str_replace('&', '__amp__', $vv);
+						$vv = strtr(rawurlencode($vv), $_revert);
+						$pageNav->setAdditionalUrlParam($i.'['.$ii.']', $vv);
+					}
+					unset($vv);
+				} else {
+					$v = str_replace('&', '__amp__', $v);
+					$v = strtr(rawurlencode($v), $_revert);
+					$pageNav->setAdditionalUrlParam($i, $v);
+				}
+			}
+		}
+		
+		$_sh404sef = defined('SH404SEF_IS_RUNNING') && JFactory::getConfig()->get('sef');
+		if ($_sh404sef) $pageNav->setAdditionalUrlParam('limit', $model->getState('limit'));
 		
 		// Create links, etc
 		$link = JRoute::_(FlexicontentHelperRoute::getTagRoute($tag->slug), false);
 		
 		//$print_link = JRoute::_('index.php?view=tags&id='.$tag->slug.'&pop=1&tmpl=component');
-    $curr_url = $_SERVER['REQUEST_URI'];
-    $print_link = $curr_url .(strstr($curr_url, '?') ? '&amp;'  : '?').'pop=1&amp;tmpl=component&amp;print=1';
+		$curr_url   = str_replace('&', '&amp;', $_SERVER['REQUEST_URI']);
+		$print_link = $curr_url .(strstr($curr_url, '?') ? '&amp;'  : '?').'pop=1&amp;tmpl=component&amp;print=1';
 		
 		$pageclass_sfx = htmlspecialchars($params->get('pageclass_sfx'));
 		

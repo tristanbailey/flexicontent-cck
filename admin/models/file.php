@@ -19,7 +19,7 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.modeladmin');
+jimport('legacy.model.admin');
 
 /**
  * FLEXIcontent Component File Model
@@ -140,9 +140,11 @@ class FlexicontentModelFile extends JModelAdmin
 	function checkin($pk = NULL)
 	{
 		if (!$pk) $pk = $this->_id;
-		if ($pk) {
-			$item = JTable::getInstance('flexicontent_files', '');
-			return $item->checkin($pk);
+
+		if ($pk)
+		{
+			$tbl = JTable::getInstance('flexicontent_files', '');
+			return $tbl->checkin($pk);
 		}
 		return false;
 	}
@@ -217,7 +219,7 @@ class FlexicontentModelFile extends JModelAdmin
 			$this->setError( $this->_db->getErrorMsg() );
 			return false;
 		}
-
+		
 		// Make sure the data is valid
 		if (!$file->check()) {
 			$this->setError( $file->getError() );
@@ -230,7 +232,7 @@ class FlexicontentModelFile extends JModelAdmin
 			return false;
 		}
 		
-		$this->_file	=& $file;
+		$this->_file = & $file;
 
 		return true;
 	}
@@ -248,7 +250,7 @@ class FlexicontentModelFile extends JModelAdmin
 		$app = JFactory::getApplication();
 
 		// Get the form.
-		$form = $this->loadForm('com_flexicontent.field', 'field', array('control' => 'jform', 'load_data' => $loadData));
+		$form = $this->loadForm('com_flexicontent.file', 'file', array('control' => 'jform', 'load_data' => $loadData));
 		if (empty($form)) {
 			return false;
 		}

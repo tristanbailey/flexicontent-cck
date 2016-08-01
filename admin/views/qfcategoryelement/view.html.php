@@ -18,10 +18,11 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
+use Joomla\String\StringHelper;
 
 /**
- * View class for the tagelement screen
+ * View class for the qfcategoryelement screen
  *
  * @package Joomla
  * @subpackage FLEXIcontent
@@ -31,103 +32,75 @@ class FlexicontentViewQfcategoryelement extends JViewLegacy
 {
 	function display($tpl = null)
 	{
-		//initialise variables
 		global $globalcats;
-		$app    = JFactory::getApplication();
-		$option = JRequest::getVar('option');
-		$view   = JRequest::getVar('view');
+		$app  = JFactory::getApplication();
 		$user = JFactory::getUser();
 		$db   = JFactory::getDBO();
+		$option   = JRequest::getVar('option');
+		$view     = JRequest::getVar('view');
 		$document	= JFactory::getDocument();
-		$template = $app->isSite() ? (!FLEXI_J16GE ? 'khepri' : (FLEXI_J30GE ? 'hathor' : 'bluestork')) : $app->getTemplate();
+
+		// Get model
+		$model = $this->getModel();
 		
-		JHTML::_('behavior.tooltip');
+		//JHTML::_('behavior.tooltip');
 		JHTML::_('behavior.modal');
 
-		//get vars
-		$order_property = !FLEXI_J16GE ? 'c.ordering' : 'c.lft';
-		$filter_order     = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_order',     'filter_order',     $order_property, 'cmd' );
-		$filter_order_Dir = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_order_Dir', 'filter_order_Dir', '', 'word' );
-		$filter_state     = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_state',     'filter_state',     '', 'string' );
-		$filter_cats      = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_cats',      'filter_cats',			 '', 'int' );
-		$filter_level     = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_level',     'filter_level',     '', 'string' );
-		$filter_access    = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_access',    'filter_access',    '', 'string' );
-		if (FLEXI_J16GE) {
-			$filter_language	= $app->getUserStateFromRequest( $option.'.'.$view.'.filter_language',  'filter_language',  '', 'string' );
+		$assocs_id   = JRequest::getInt( 'assocs_id', 0 );
+		
+		$language    = !$assocs_id ? JRequest::getCmd('language') : $app->getUserStateFromRequest( $option.'.'.$view.'.language', 'language', '', 'string' );
+		$created_by  = !$assocs_id ? JRequest::getCmd('created_by') : $app->getUserStateFromRequest( $option.'.'.$view.'.created_by', 'created_by', 0, 'int' );
+		
+		if ($assocs_id)
+		{
+			$assocanytrans = $user->authorise('flexicontent.assocanytrans', 'com_flexicontent');
+			if (!$assocanytrans && !$created_by)  $created_by = $user->id;
 		}
-		$search  = $app->getUserStateFromRequest( $option.'.'.$view.'.search', 			'search', 			'', 'string' );
-		$search  = FLEXI_J16GE ? $db->escape( trim(JString::strtolower( $search ) ) ) : $db->getEscaped( trim(JString::strtolower( $search ) ) );
+		
+		// get filter values
+		$filter_order     = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_order',     'filter_order',     'c.lft'	, 'cmd' );
+		$filter_order_Dir = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_order_Dir',	'filter_order_Dir',	''			, 'cmd' );
+		
+		$filter_state  = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_state',  'filter_state',   '',    'cmd' );
+		$filter_cats   = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_cats',   'filter_cats',    0,     'int' );
+		$filter_level  = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_level',  'filter_level',   0,     'int' );
+		$filter_access = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_access', 'filter_access',  '',    'string' );
+		$filter_lang   = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_lang',   'filter_lang',    '',    'cmd' );
+		$filter_author = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_author', 'filter_author',  '',    'cmd' );
+		
+		$search = $app->getUserStateFromRequest( $option.'.'.$view.'.search', 			'search', 			'', 'string' );
+		$search = $db->escape( StringHelper::trim(StringHelper::strtolower( $search ) ) );
 
-		// Prepare the document: add css files, etc
+		// Prepare the document: set title, add css files, etc
 		$document->setTitle(JText::_( 'FLEXI_SELECTITEM' ));
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
-		$document->addStyleSheet(JURI::root().'administrator/templates/'.$template.(FLEXI_J16GE ? '/css/template.css': '/css/general.css'));
-
+		
+		$app->isSite() ?
+			$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH) :
+			$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
+		// Add JS frameworks
+		flexicontent_html::loadFramework('select2');
+		
+		// Include backend CSS template CSS file , access to backend folder may not be allowed but ...
+		//$template = $app->isSite() ? (!FLEXI_J16GE ? 'khepri' : (FLEXI_J30GE ? 'hathor' : 'bluestork')) : $app->getTemplate();
+		//$document->addStyleSheet(JURI::base(true).'/templates/'.$template.(FLEXI_J16GE ? '/css/template.css': '/css/general.css'));
+		
 		//Get data from the model
-		if (FLEXI_J16GE) {
-			$rows = $this->get( 'Items');
-		} else {
-			$rows = $this->get( 'Data');
-		}
+		$rows     = $this->get( 'Items');
+		$authors  = $this->get( 'Authorslist' );
+		$pagination = $this->get( 'Pagination' );
+		
+		// Ordering active FLAG
+		$ordering = ($filter_order == 'c.lft');
 		
 		// Parse configuration for every category
-   	foreach ($rows as $cat)  $cat->config = FLEXI_J16GE ? new JRegistry($cat->config) : new JParameter($cat->config);
+   	foreach ($rows as $cat)  $cat->config = new JRegistry($cat->config);
 		
-		$pagination 	= $this->get( 'Pagination' );
 		
 		// *******************
 		// Create Form Filters
 		// *******************
-		
-		// filter by a category (it's subtree will be displayed)
-		$categories = $globalcats;
-		$lists['cats'] = flexicontent_cats::buildcatselect($categories, 'filter_cats', $filter_cats, 2, 'class="inputbox" size="1" onchange="this.form.submit();"', $check_published=true, $check_perms=false);
-		
-		// filter depth level
-		$options	= array();
-		$options[]	= JHtml::_('select.option', '', JText::_( 'FLEXI_SELECT_MAX_DEPTH' ));
-		for($i=1; $i<=10; $i++) $options[]	= JHtml::_('select.option', $i, $i);
-		$fieldname =  $elementid = 'filter_level';
-		$attribs = ' class="inputbox" onchange="this.form.submit();" ';
-		$lists['level']	= JHTML::_('select.genericlist', $options, $fieldname, $attribs, 'value', 'text', $filter_level, $elementid, $translate=true );
-		
-		// filter publication state
-		if (FLEXI_J16GE)
-		{
-			$options = JHtml::_('jgrid.publishedOptions');
-			array_unshift($options, JHtml::_('select.option', '', JText::_('JOPTION_SELECT_PUBLISHED')) );
-			$fieldname =  $elementid = 'filter_state';
-			$attribs = ' class="inputbox" onchange="Joomla.submitform()" ';
-			$lists['state']	= JHTML::_('select.genericlist', $options, $fieldname, $attribs, 'value', 'text', $filter_state, $elementid, $translate=true );
-		} else {
-			$lists['state']	= JHTML::_('grid.state', $filter_state );
-		}
-		
-		if (FLEXI_J16GE)
-		{
-			// filter access level
-			$options = JHtml::_('access.assetgroups');
-			array_unshift($options, JHtml::_('select.option', '', JText::_('JOPTION_SELECT_ACCESS')) );
-			$fieldname =  $elementid = 'filter_access';
-			$attribs = ' class="inputbox" onchange="Joomla.submitform()" ';
-			$lists['access']	= JHTML::_('select.genericlist', $options, $fieldname, $attribs, 'value', 'text', $filter_access, $elementid, $translate=true );
-			
-			// filter language
-			$lists['language'] = flexicontent_html::buildlanguageslist('filter_language', 'class="inputbox" onchange="submitform();"', $filter_language, 2);
-		} else {
-			// filter access level
-			$options = array();
-			$options[] = JHtml::_('select.option', '', JText::_('FLEXI_SELECT_ACCESS_LEVEL'));
-			$options[] = JHtml::_('select.option', '0', JText::_('Public'));
-			$options[] = JHtml::_('select.option', '1', JText::_('Registered'));
-			$options[] = JHtml::_('select.option', '2', JText::_('SPECIAL'));
-			$fieldname =  $elementid = 'filter_access';
-			$attribs = ' class="inputbox" onchange="this.form.submit()" ';
-			$lists['access']	= JHTML::_('select.genericlist', $options, $fieldname, $attribs, 'value', 'text', $filter_access, $elementid, $translate=true );
-		}
 		
 		// filter search word
 		$lists['search']= $search;
@@ -135,12 +108,60 @@ class FlexicontentViewQfcategoryelement extends JViewLegacy
 		// table ordering
 		$lists['order_Dir'] = $filter_order_Dir;
 		$lists['order'] = $filter_order;
+		
+		// build the categories select list
+		$categories = $globalcats;
+		$lists['filter_cats'] =  '<label class="label">'.JText::_('FLEXI_CATEGORY').'</label>'.
+			flexicontent_cats::buildcatselect($categories, 'filter_cats', $filter_cats, '-'/*2*/, 'class="use_select2_lib fcfilter_be" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', $check_published=true, $check_perms=false);
+		
+		// filter depth level
+		$depths	= array();
+		$depths[]	= JHtml::_('select.option', '', '-'/*'FLEXI_SELECT_MAX_DEPTH'*/);
+		for($i=1; $i<=10; $i++) $depths[]	= JHtml::_('select.option', $i, $i);
+		
+		$fieldname =  $elementid = 'filter_level';
+		$attribs = ' class="use_select2_lib fcfilter_be" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()" ';
+		$lists['filter_level'] = '<label class="label">'.JText::_('FLEXI_MAX_DEPTH').'</label>'.
+			JHTML::_('select.genericlist', $depths, $fieldname, $attribs, 'value', 'text', $filter_level, $elementid
+		, $translate=true );
+		
+		// build author select list
+		$lists['filter_author'] = '<label class="label">'.JText::_('FLEXI_AUTHOR').'</label>'.
+			($assocs_id && $created_by ?
+				'<span class="badge badge-info">'.JFactory::getUser($created_by)->name.'</span>' :
+				flexicontent_html::buildauthorsselect($authors, 'filter_author', $filter_author, '-'/*true*/, 'class="use_select2_lib fcfilter_be" size="3" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"')
+			);
 
-		$ordering = ($lists['order'] == $order_property) ? $order_property : '';
-
-		//assign data to template
-		$this->assignRef('lists'			, $lists);
-		$this->assignRef('rows'				, $rows);
+		// build publication state filter
+		$states = JHtml::_('jgrid.publishedOptions');
+		array_unshift($states, JHtml::_('select.option', '', '-'/*'FLEXI_SELECT_STATE'*/));
+		
+		$fieldname =  $elementid = 'filter_state';
+		$attribs = ' class="use_select2_lib fcfilter_be" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()" ';
+		$lists['filter_state'] = '<label class="label">'.JText::_('FLEXI_STATE').'</label>'.
+			JHTML::_('select.genericlist', $states, $fieldname, $attribs, 'value', 'text', $filter_state, $elementid
+		, $translate=true );
+		
+		// build access level filter
+		$levels = JHtml::_('access.assetgroups');
+		array_unshift($levels, JHtml::_('select.option', '', '-'/*'FLEXI_SELECT_ACCESS'*/));
+		$fieldname =  $elementid = 'filter_access';
+		$attribs = ' class="use_select2_lib fcfilter_be" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()" ';
+		$lists['filter_access']	= '<label class="label">'.JText::_('FLEXI_ACCESS').'</label>'.
+			JHTML::_('select.genericlist', $levels, $fieldname, $attribs, 'value', 'text', $filter_access, $elementid
+		, $translate=true );
+		
+		// build language filter
+		$lists['filter_lang'] = '<label class="label">'.JText::_('FLEXI_LANGUAGE').'</label>'.
+			($assocs_id && $language ?
+				'<span class="badge badge-info">'.$language.'</span>' :
+				flexicontent_html::buildlanguageslist('filter_lang', 'class="use_select2_lib fcfilter_be" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', $filter_lang, '-'/*2*/)
+			);
+		
+		// assign data to template
+		$this->assignRef('assocs_id'	, $assocs_id);
+		$this->assignRef('lists'     	, $lists);
+		$this->assignRef('rows'      	, $rows);
 		$this->assignRef('ordering'		, $ordering);
 		$this->assignRef('pagination'	, $pagination);
 

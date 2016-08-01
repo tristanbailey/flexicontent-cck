@@ -19,7 +19,8 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.modellist');
+jimport('legacy.model.list');
+use Joomla\String\StringHelper;
 
 /**
  * FLEXIcontent Component Categories Model
@@ -45,12 +46,100 @@ class FlexicontentModelCategories extends JModelList
 	function __construct()
 	{
 		parent::__construct();
+		
+		$app     = JFactory::getApplication();
+		$jinput  = $app->input;
+		$option  = $jinput->get('option', '', 'cmd');
+		$view    = $jinput->get('view', '', 'cmd');
+		$fcform  = $jinput->get('fcform', 0, 'int');
+		
+		$p = $option.'.'.$view.'.';
+		
+		
+		// **************
+		// view's Filters
+		// **************
+		
+		// Various filters
+		$filter_cats      = $fcform ? $jinput->get('filter_cats',     0,  'int')     :  $app->getUserStateFromRequest( $p.'filter_cats',      'filter_cats',      0,   'int' );
+		$filter_state     = $fcform ? $jinput->get('filter_state',    '', 'string')  :  $app->getUserStateFromRequest( $p.'filter_state',     'filter_state',     '',  'string' );   // we may check for '*', so string filter
+		$filter_access    = $fcform ? $jinput->get('filter_access',   '', 'int')     :  $app->getUserStateFromRequest( $p.'filter_access',    'filter_access',    '',  'int' );
+		$filter_level     = $fcform ? $jinput->get('filter_level',    '', 'int')     :  $app->getUserStateFromRequest( $p.'filter_level',     'filter_level',     '',  'int' );
+		$filter_language  = $fcform ? $jinput->get('filter_language', '', 'string')  :  $app->getUserStateFromRequest( $p.'filter_language',  'filter_language',  '',  'string' );
+		
+		$this->setState('filter_cats',     $filter_cats);
+		$this->setState('filter_state',    $filter_state);
+		$this->setState('filter_access',   $filter_access);
+		$this->setState('filter_level',    $filter_level);
+		$this->setState('filter_language', $filter_language);
+		
+		$app->setUserState($p.'filter_cats',     $filter_cats);
+		$app->setUserState($p.'filter_state',    $filter_state);
+		$app->setUserState($p.'filter_access',   $filter_access);
+		$app->setUserState($p.'filter_level',    $filter_level);
+		$app->setUserState($p.'filter_language', $filter_language);
+		
+		
+		// Item ID filter
+		$filter_id  = $fcform ? $jinput->get('filter_id', '', 'int')  :  $app->getUserStateFromRequest( $p.'filter_id',  'filter_id',  '',  'int' );
+		$filter_id  = $filter_id ? $filter_id : '';  // needed to make text input field be empty
+		
+		$this->setState('filter_id', $filter_id);
+		$app->setUserState($p.'filter_id', $filter_id);
+		
+		
+		// Text search
+		$search = $fcform ? $jinput->get('search', '', 'string')  :  $app->getUserStateFromRequest( $p.'search',  'search',  '',  'string' );
+		$this->setState('search', $search);
+		$app->setUserState($p.'search', $search);
+		
+		
+		
+		// ****************************************
+		// Ordering: filter_order, filter_order_Dir
+		// ****************************************
+		
+		$default_order     = 'c.lft';
+		$default_order_dir = 'ASC';
+		
+		$filter_order      = $fcform ? $jinput->get('filter_order',     $default_order,      'cmd')  :  $app->getUserStateFromRequest( $p.'filter_order',     'filter_order',     $default_order,      'cmd' );
+		$filter_order_Dir  = $fcform ? $jinput->get('filter_order_Dir', $default_order_dir, 'word')  :  $app->getUserStateFromRequest( $p.'filter_order_Dir', 'filter_order_Dir', $default_order_dir, 'word' );
+		
+		if (!$filter_order)     $filter_order     = $default_order;
+		if (!$filter_order_Dir) $filter_order_Dir = $default_order_dir;
+		
+		$this->setState('filter_order', $filter_order);
+		$this->setState('filter_order_Dir', $filter_order_Dir);
+		
+		$app->setUserState($p.'filter_order', $filter_order);
+		$app->setUserState($p.'filter_order_Dir', $filter_order_Dir);
+		
+		
+		
+		// *****************************
+		// Pagination: limit, limitstart
+		// *****************************
+		
+		$limit      = $fcform ? $jinput->get('limit', $app->getCfg('list_limit'), 'int')  :  $app->getUserStateFromRequest( $p.'limit', 'limit', $app->getCfg('list_limit'), 'int');
+		$limitstart = $fcform ? $jinput->get('limitstart',                     0, 'int')  :  $app->getUserStateFromRequest( $p.'limitstart', 'limitstart', 0, 'int' );
+		
+		// In case limit has been changed, adjust limitstart accordingly
+		$limitstart = ( $limit != 0 ? (floor($limitstart / $limit) * $limit) : 0 );
+		$jinput->set( 'limitstart',	$limitstart );
 
-		$array = JRequest::getVar('cid',  0, '', 'array');
+		$this->setState('limit', $limit);
+		$this->setState('limitstart', $limitstart);
+		
+		$app->setUserState($p.'limit', $limit);
+		$app->setUserState($p.'limitstart', $limitstart);
+		
+		
+		// For some model function that use single id
+		$array = $jinput->get('cid', array(0), 'array');
 		$this->setId((int)$array[0]);
-
 	}
-
+	
+	
 	/**
 	 * Method to set the category identifier
 	 *
@@ -78,13 +167,68 @@ class FlexicontentModelCategories extends JModelList
 		$db = JFactory::getDBO();
 		
 		// Select the required fields from the table.
-		$query  = " SELECT rel.catid, COUNT(rel.itemid) AS nrassigned";
-		$query .= " FROM #__flexicontent_cats_item_relations AS rel";
-		$query .= " WHERE rel.catid IN (".implode(",", $cids).") ";
-		$query .= " GROUP BY rel.catid";
+		$query = " SELECT rel.catid, COUNT(rel.itemid) AS nrassigned"
+			." FROM #__flexicontent_cats_item_relations AS rel"
+			." WHERE rel.catid IN (".implode(",", $cids).") "
+			." GROUP BY rel.catid";
 		
 		$db->setQuery( $query );
 		$assigned = $db->loadObjectList('catid');
+		return $assigned;
+	}
+	
+	
+	/**
+	 * Method to get parameters of parent categories
+	 *
+	 * @access public
+	 * @return	string
+	 * @since	1.6
+	 */
+	function getParentParams($cid) {
+		if (empty($cid)) return array();
+		
+		global $globalcats;
+		$db = JFactory::getDBO();
+		
+		// Select the required fields from the table.
+		$query = " SELECT id, params"
+			." FROM #__categories"
+			." WHERE id IN (".$globalcats[$cid]->ancestors.") "
+			." ORDER BY level ASC";
+		
+		$db->setQuery( $query );
+		$data = $db->loadObjectList('id');
+		return $data;
+	}
+	
+	
+	/**
+	 * Method to count assigned items for the given categories
+	 *
+	 * @access public
+	 * @return	string
+	 * @since	1.6
+	 */
+	function countItemsByState($cids) {
+		if (empty($cids)) return array();
+		
+		$db = JFactory::getDBO();
+		
+		// Select the required fields from the table.
+		$query  = " SELECT rel.catid, i.state, COUNT(rel.itemid) AS nrassigned";
+		$query .= " FROM #__flexicontent_cats_item_relations AS rel";
+		$query .= " JOIN #__content AS i ON i.id=rel.itemid ";
+		$query .= " WHERE rel.catid IN (".implode(",", $cids).") ";
+		$query .= " GROUP BY rel.catid, i.state";
+		
+		$db->setQuery( $query );
+		$data = $db->loadObjectList();
+		$assigned = array();
+		foreach($data as $catid => $d) {
+			$assigned[$d->catid][$d->state] = $d->nrassigned;
+			//if ($d==1 || $d==-5) $assigned[$d->catid][$d->state] = $d->nrassigned;
+		}
 		return $assigned;
 	}
 	
@@ -98,28 +242,39 @@ class FlexicontentModelCategories extends JModelList
 	 */
 	function getListQuery()
 	{
-		$app  = JFactory::getApplication();
-		$db   = JFactory::getDBO();
-		$user = JFactory::getUser();
-		$option = JRequest::getVar('option');
-		$view   = JRequest::getVar('view');
+		// Create a query with all its clauses: WHERE, HAVING and ORDER BY, etc
 		global $globalcats;
 		
-		$order_property = !FLEXI_J16GE ? 'c.ordering' : 'c.lft';
-		$filter_order     = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_order',     'filter_order',     $order_property, 'cmd' );
-		$filter_order_Dir = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_order_Dir', 'filter_order_Dir', '', 'word' );
-		$filter_cats      = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_cats',			 'filter_cats',			 '', 'int' );
-		$filter_state     = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_state',     'filter_state',     '', 'string' );
-		$filter_access    = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_access',    'filter_access',    '', 'string' );
-		$filter_level     = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_level',     'filter_level',     '', 'string' );
-		if (FLEXI_J16GE) {
-			$filter_language  = $app->getUserStateFromRequest( $option.'.'.$view.'.filter_language',  'filter_language',  '', 'string' );
-		}
-		$search           = $app->getUserStateFromRequest( $option.'.'.$view.'.search',           'search',           '', 'string' );
-		$search           = trim( JString::strtolower( $search ) );
-
+		$app     = JFactory::getApplication();
+		$jinput  = $app->input;
+		$option  = $jinput->get('option', '', 'cmd');
+		$view    = $jinput->get('view', '', 'cmd');
+		$fcform  = $jinput->get('fcform', 0, 'int');
+		
+		$db   = JFactory::getDBO();
+		$user = JFactory::getUser();
+		
+		// various filters
+		$filter_cats      = $this->getState( 'filter_cats' );
+		$filter_state     = $this->getState( 'filter_state' );
+		$filter_access    = $this->getState( 'filter_access' );
+		$filter_level     = $this->getState( 'filter_level' );
+		$filter_language  = $this->getState( 'filter_language' );
+		
+		// filter id
+		$filter_id = $this->getState( 'filter_id' );
+		
+		// text search
+		$search = $this->getState( 'search' );
+		$search = StringHelper::trim( StringHelper::strtolower( $search ) );
+		
+		// ordering filters
+		$filter_order     = $this->getState( 'filter_order' );
+		$filter_order_Dir = $this->getState( 'filter_order_Dir' );
+		
 		// Create a new query object.
 		$query = $db->getQuery(true);
+		
 		// Select the required fields from the table.
 		$query->select(
 			$this->getState(
@@ -142,12 +297,13 @@ class FlexicontentModelCategories extends JModelList
 		$query->where("c.extension = '".FLEXI_CAT_EXTENSION."' ");
 		
 		
-		// Filter by publicationd state
+		// Filter by publication state
 		if (is_numeric($filter_state)) {
 			$query->where('c.published = ' . (int) $filter_state);
 		}
 		elseif ( $filter_state === '') {
 			$query->where('c.published IN (0, 1)');
+		} else {  // $filter_state === '*', or any other will allow all states including: archive, trashed 
 		}
 		
 		// Filter by access level
@@ -170,7 +326,12 @@ class FlexicontentModelCategories extends JModelList
 		
 		// Filter by language
 		if ( $filter_language ) {
-			$query->where('l.lang_code = '.$db->Quote( $filter_language ) );
+			$query->where('c.language = '.$db->Quote( $filter_language ));
+		}
+		
+		// Filter by id
+		if ( $filter_id ) {
+			$query->where('c.id = '.(int) $filter_id);
 		}
 		
 		// Implement View Level Access
@@ -181,7 +342,7 @@ class FlexicontentModelCategories extends JModelList
 		}
 		
 		// Filter by search word (can be also be  id:NN  OR author:AAAAA)
-		if (!empty($search)) {
+		if (strlen($search)) {
 			if (stripos($search, 'id:') === 0) {
 				$query->where('c.id = '.(int) substr($search, 3));
 			}
@@ -251,7 +412,7 @@ class FlexicontentModelCategories extends JModelList
 				. ' AND ( checked_out = 0 OR ( checked_out = ' . (int) $user->get('id'). ' ) )'
 			;
 			$this->_db->setQuery( $query );
-			if (!$this->_db->query()) {
+			if (!$this->_db->execute()) {
 				$this->setError($this->_db->getErrorMsg());
 				return false;
 			}
@@ -335,8 +496,7 @@ class FlexicontentModelCategories extends JModelList
 	 */
 	/*function checkin()
 	{
-		$cid      = JRequest::getVar( 'cid', array(0), 'post', 'array' );
-		$pk       = (int)$cid[0];
+		$pk = (int)$this->_id;
 		
 		// Only attempt to check the row in if it exists.
 		if ($pk)
@@ -407,18 +567,16 @@ class FlexicontentModelCategories extends JModelList
 			return false;
 		}
 		
-		if (FLEXI_J16GE) {
-			// Check access to delete of categories, this may seem redundant, but it is a security check in case user manipulates the backend adminform ...
-			foreach ($rows as $row) {
-				$canDelete		= $user->authorise('core.delete', 'com_content.category.'.$row->id);
-				$canDeleteOwn	= $user->authorise('core.delete.own', 'com_content.category.'.$row->id) && $row->created_user_id == $user->get('id');
-				if	( !$canDelete && !$canDeleteOwn ) {
-					$this->setError(
-						'You are not authorised to delete category with id: '. $row->id
-						.'<br />NOTE: when deleting a category the children categories will get deleted too'
-					);
-					return false;
-				}
+		// Check access to delete of categories, this may seem redundant, but it is a security check in case user manipulates the backend adminform ...
+		foreach ($rows as $row) {
+			$canDelete		= $user->authorise('core.delete', 'com_content.category.'.$row->id);
+			$canDeleteOwn	= $user->authorise('core.delete.own', 'com_content.category.'.$row->id) && $row->created_user_id == $user->get('id');
+			if	( !$canDelete && !$canDeleteOwn ) {
+				$this->setError(
+					'You are not authorised to delete category with id: '. $row->id
+					.'<br />NOTE: when deleting a category the children categories will get deleted too'
+				);
+				return false;
 			}
 		}
 		
@@ -437,40 +595,11 @@ class FlexicontentModelCategories extends JModelList
 		// Remove categories only if no errors were found
 		if (count( $cid ) && count($err) == 0)
 		{
-			if (FLEXI_J16GE) {
-				// table' is object of 'JTableNested' extended class, which will also delete assets
-				$cids = $cid;
-				foreach ($cids as $id) {
-					$table-> id = $id;
-					$table->delete($id);
-				}
-			} else {
-
-				$cids = implode( ',', $cid );
-				$query = 'DELETE FROM #__categories'
-						. ' WHERE id IN ('. $cids .')';
-				
-				$this->_db->setQuery( $query );
-				
-				if(!$this->_db->query()) {
-					$this->setError($this->_db->getErrorMsg());
-					return false;
-				}
-			}
-			
-			// remove also categories acl if applicable
-			if (FLEXI_ACCESS) {
-				$query 	= 'DELETE FROM #__flexiaccess_acl'
-						. ' WHERE acosection = ' . $this->_db->Quote('com_content')
-						. ' AND axosection = ' . $this->_db->Quote('category')
-						. ' AND axo IN ('. $cids .')'
-						;
-				$this->_db->setQuery( $query );
-				
-				if(!$this->_db->query()) {
-					$this->setError($this->_db->getErrorMsg());
-					return false;
-				}
+			// table' is object of 'JTableNested' extended class, which will also delete assets
+			$cids = $cid;
+			foreach ($cids as $id) {
+				$table-> id = $id;
+				$table->delete($id);
 			}
 		}
 		

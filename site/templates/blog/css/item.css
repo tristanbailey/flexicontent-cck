@@ -1,42 +1,40 @@
-/* Blog Theme : item template CSS file */
-
-/********************************************************************/
-/*** Part 1, CSS rules for fields display via Template parameters ***/
-/********************************************************************/
-
-.iteminfo .createdline {
-	font-family:tahoma;
-	font-size:9px;
-	display:block;
+body #flexicontent .fc_item_title,
+body #flexicontent .fc_item_title a {
+	color: inherit;
 }
-.iteminfo .createdby {
-	font-size:9px;
-	font-weight:normal;
+body #flexicontent .flexi.label,
+body #flexicontent .desc-title.label {
+	background-color: #999999;
+	color: #ffffff;
+	border-radius: 3px;
+	-webkit-border-radius: 3px;
+	-moz-border-radius: 3px;
 }
-.iteminfo .created {
-	font-size:9px;
-	font-weight:bold;
-}
-
+.iteminfo .createdline,
 .iteminfo .modifiedline {
-	font-family:tahoma;
-	font-size:9px;
-	display:block;
+	font-size: 90%;
+	display: block;
 }
+.iteminfo .createdby,
 .iteminfo .modifiedby {
-	font-size:9px;
-	font-weight:normal;
+	font-size: 90%;
+	font-weight: normal;
+	display: inline-block;
 }
+.iteminfo .created,
 .iteminfo .modified {
-	font-size:9px;
-	font-weight:bold;
+	font-size: 90%;
+	font-weight: bold;
+	display: inline-block;
 }
-
-.itemactions, .iteminfo, .itemadditionnal, .description {
-	margin: 0 0 1em;
+.itemactions,
+.iteminfo,
+.itemadditionnal,
+.description {
+	margin: 1em 0 1em 0;
 }
 .iteminfo {
-	margin: 0 0 0.4em;
+	margin: 1em 0 1em 0.4em;
 }
 .description {
 	clear: both;
@@ -44,13 +42,11 @@
 .itemactions span {
 	margin: 0 0 0.5em;
 }
-.itemactions .voting {
-	margin-right: 6px;
+.itemactions .voting,
+.itemactions .favourites {
+	margin-right: 32px;
 	float: left;
 }
-.itemactions .favourites {
-}
-
 .itemadditionnal span {
 	margin: 0 0 0.3em;
 }
@@ -60,99 +56,40 @@
 .itemadditionnal .tags {
 	display: block;
 }
-
-.flexi.label { font-weight:bold; }
-.flexi.value { font-weight:normal; }
-
-
-
-
-
-/*******************************************************************/
-/*** Part 2, CSS rules for fields display via Template positions ***/
-/*******************************************************************/
-
-
-/* Rule for customblock used to display fields via template positions */
 .customblock {
-	width: 98%!important;
-	padding: 3px 1%!important;
-	margin: 8px 0px!important;
-	
-	display:block;
-	float:left;
+	width: 98% !important;
+	padding: 2px 1% !important;
+	margin: 8px 0px !important;
+	display: block;
+	float: left;
 	border: 1px solid #dddddd;
+	border-radius: 4px;
 }
-
-
-/* Default rule for elements: Use auto columns, via min-width we can have full row automaticaly for larger elements (pseudo colspan=2 via css) */
 .customblock .element {
-	max-width: 100%!important;
-	min-width: 50%!important;
-	padding: 3px 0% 3px 0%!important;
-	margin: 0%!important;
-	
-	display:block;
-	float:left;
+	max-width: 100% !important;
+	min-width: 50% !important;
+	padding: 3px 0% 3px 0% !important;
+	margin: 0% !important;
+	display: block;
+	float: left;
 	border-width: 0%;
 }
-
-/* Force 1 column for all elements */
 .customblock .element.singlecol {
-	width: 100%!important;
-	padding: 0%!important;
+	width: 100% !important;
+	padding: 0% !important;
 }
-
-/* Force 2 columns for all elements */
 .customblock .element.doublecol {
-	width: 48%!important;
+	width: 48% !important;
 	overflow: hidden;
 }
-
-
-/* Field label inside the custom blocks */
-.customblock .flexi.label {
-}
-
-/* Field value inside the custom blocks */
-.customblock .flexi.value {
-}
-
-/* Field value when having no label */
 .customblock .flexi.value.nolabel {
-	width: 100%!important;
+	width: 100% !important;
 }
-
-/* ===============================================
-   "micro" clearfix 
-   http://nicolasgallagher.com/micro-clearfix-hack/
-   =============================================== */
-
-/**
- * For modern browsers
- * 1. The space content is one way to avoid an Opera bug when the
- *    contenteditable attribute is included anywhere else in the document.
- *    Otherwise it causes space to appear at the top and bottom of elements
- *    that are clearfixed.
- * 2. The use of `table` rather than `block` is only necessary if using
- *    `:before` to contain the top-margins of child elements.
- */
 .group:before,
 .group:after {
-	content: " "; /* 1 */
-	display: table; /* 2 */
+	content: " ";
+	display: table;
 }
-
 .group:after {
 	clear: both;
-}
-
-/**
- * Include this rule to trigger hasLayout and contain floats.
- */
-.group {
-	/* for IE 6/7 */
-	*zoom: expression(this.runtimeStyle.zoom="1", this.appendChild(document.createElement("br")).style.cssText="clear:both;font:0/0 serif");
-	/* non-JS fallback */
-	*zoom: 1;
 }

@@ -20,6 +20,9 @@ defined( '_JEXEC' ) or die( 'Restricted access' );
 // first define the template name
 $tmpl = $this->tmpl;
 $user = JFactory::getUser();
+
+// MICRODATA 'itemtype' for ALL items in the listing (this is the fallback if the 'itemtype' in content type / item configuration are not set)
+$microdata_itemtype_cat = $this->params->get( 'microdata_itemtype_cat', 'Article' );
 ?>
 
 <?php
@@ -36,7 +39,7 @@ $user = JFactory::getUser();
 	}
 ?>
 
-<div class="clear"></div>
+<div class="fcclear"></div>
 
 <?php
 $items = & $this->items;
@@ -65,6 +68,11 @@ if ( $user->id ) :
 			if ($item->statebutton = flexicontent_html::statebutton( $item, $this->params )) :
 				$item->statebutton = '<div class="fc_state_toggle_link_nopad">'.$item->statebutton.'</div>';
 			endif;
+		endif;
+		
+		if ($item->deletebutton = flexicontent_html::deletebutton( $item, $this->params )) :
+			$buttons_exists = true;
+			$item->deletebutton = '<div class="fc_delete_link">'.$item->deletebutton.'</div>';
 		endif;
 		
 		if ($item->approvalbutton = flexicontent_html::approvalbutton( $item, $this->params )) :
@@ -101,15 +109,46 @@ $classnum = $tmpl_cols_classes[$tmpl_cols];
 // bootstrap span
 $tmpl_cols_spanclasses = array(1=>'span12',2=>'span6',3=>'span4',4=>'span3');
 $classspan = $tmpl_cols_spanclasses[$tmpl_cols];
+
+
+// ITEMS as MASONRY tiles
+if (!empty($this->items) && ($this->params->get('cols_placement', 1)==1))
+{
+	flexicontent_html::loadFramework('masonry');
+	flexicontent_html::loadFramework('imagesLoaded');
+	
+	$js = "
+		jQuery(document).ready(function(){
+	";
+	if ($this->params->get('cols_placement', 1)==1) {
+		$js .= "
+			var container_intro = document.querySelector('ul.faqblock.masonryblock');
+			var msnry_intro;
+			// initialize Masonry after all images have loaded
+			if (container_intro) {
+				imagesLoaded( container_intro, function() {
+					msnry_intro = new Masonry( container_intro );
+				});
+			}
+		";
+	}
+	$js .= "	
+		});
+	";
+	JFactory::getDocument()->addScriptDeclaration($js);
+}
 ?>
 
-<ul class="faqblock <?php echo $classnum; ?> group">	
+<ul class="faqblock group row">	
 
 <?php
 $show_itemcount   = $this->params->get('show_itemcount', 1);
 $show_subcatcount = $this->params->get('show_subcatcount', 0);
 $itemcount_label   = ($show_itemcount==2   ? JText::_('FLEXI_ITEM_S') : '');
 $subcatcount_label = ($show_subcatcount==2 ? JText::_('FLEXI_CATEGORIES') : '');
+
+$tooltip_class = FLEXI_J30GE ? 'hasTooltip' : 'hasTip';
+$_comments_container_params = 'class="fc_comments_count_nopad '.$tooltip_class.'" title="'.flexicontent_html::getToolTip('FLEXI_NUM_OF_COMMENTS', 'FLEXI_NUM_OF_COMMENTS_TIP', 1, 1).'"';
 
 global $globalcats;
 $count_cat = -1;
@@ -118,6 +157,11 @@ foreach ($cat_items as $catid => $items) :
 	if (count($items)==0) continue;
 	if ($catid!=$currcatid) $count_cat++;
 ?>
+
+<?php if ($count_cat==0): ?>
+</ul>
+<ul class="faqblock <?php echo $classnum; ?> masonryblock group">
+<?php endif; ?>
 
 <li class="<?php echo $catid==$currcatid ? 'full' : ($count_cat%2 ? 'even' : 'odd'); ?>">
 	
@@ -133,7 +177,7 @@ foreach ($cat_items as $catid => $items) :
 				<!-- EOF subcategory image -->
 			<?php endif; ?>
 
-			<?php if ($catid!=$currcatid) { ?> <a class='fc_cat_title' href="<?php echo JRoute::_( FlexicontentHelperRoute::getCategoryRoute($sub->slug) ); ?>"> <?php } else { echo "<span class='fc_cat_title'>"; } ?>
+			<?php if ($catid!=$currcatid) { ?> <a class='fc_cat_title' href="<?php echo JRoute::_( FlexicontentHelperRoute::getCategoryRoute($sub->slug) ); ?>" itemprop="url"> <?php } else { echo "<span class='fc_cat_title'>"; } ?>
 				<!-- BOF subcategory title -->
 				<?php echo $sub->title; ?>
 				<!-- EOF subcategory title -->
@@ -182,8 +226,13 @@ foreach ($cat_items as $catid => $items) :
 						}
 					}
 					$markup_tags .= '</span>';
+					
+					// MICRODATA document type (itemtype) for each item
+					// -- NOTE: category's microdata itemtype is fallback if the microdata itemtype of the CONTENT TYPE / ITEM are not set
+					$microdata_itemtype = $item->params->get( 'microdata_itemtype') ? $item->params->get( 'microdata_itemtype') : $microdata_itemtype_cat;
+					$microdata_itemtype_code = $microdata_itemtype ? 'itemscope itemtype="http://schema.org/'.$microdata_itemtype.'"' : '';
 					?>
-					<li id="faqlist_cat_<?php echo $catid; ?>item_<?php echo $i; ?>" class="<?php echo $fc_item_classes; ?>">
+					<li id="faqlist_cat_<?php echo $catid; ?>item_<?php echo $i; ?>" class="<?php echo $fc_item_classes; ?>" <?php echo $microdata_itemtype_code; ?> >
 						
 					  <?php if ($item->event->beforeDisplayContent) : ?>
 					  <!-- BOF beforeDisplayContent -->
@@ -203,7 +252,7 @@ foreach ($cat_items as $catid => $items) :
 								
 								<?php if ($this->params->get('show_comments_count')) : ?>
 									<?php if ( isset($this->comments[ $item->id ]->total) ) : ?>
-									<div class="fc_comments_count_nopad hasTip" alt="<?php echo JText::_('FLEXI_NUM_OF_COMMENTS');?>" title="<?php echo JText::_('FLEXI_NUM_OF_COMMENTS');?>::<?php echo JText::_('FLEXI_NUM_OF_COMMENTS_TIP');?>">
+									<div <?php echo $_comments_container_params; ?> >
 										<?php echo $this->comments[ $item->id ]->total; ?>
 									</div>
 									<?php endif; ?>
@@ -211,17 +260,19 @@ foreach ($cat_items as $catid => $items) :
 						
 								<?php if ($this->params->get('show_title', 1)) : ?>
 									<!-- BOF item title -->
+									<span class="fc_item_title" itemprop="name">
 									<?php if ($this->params->get('link_titles', 0)) : ?>
-						   			<a class="fc_item_title" href="<?php echo JRoute::_(FlexicontentHelperRoute::getItemRoute($item->slug, $item->categoryslug, 0, $item)); ?>">
+						   			<a href="<?php echo JRoute::_(FlexicontentHelperRoute::getItemRoute($item->slug, $item->categoryslug, 0, $item)); ?>" itemprop="url">
 											<?php echo $item->title; ?>
 										</a>
 					   			<?php else : ?>
 										<?php echo $item->title; ?>
 									<?php endif; ?>
-									<!-- BOF item title -->
+									</span>
+									<!-- EOF item title -->
 								<?php endif; ?>
 								
-								<div class="clear"></div>
+								<div class="fcclear"></div>
 								<?php echo $markup_tags; ?>
 						
 								<?php if ($item->event->afterDisplayTitle) : ?>

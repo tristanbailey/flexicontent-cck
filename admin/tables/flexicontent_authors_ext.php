@@ -39,7 +39,7 @@ class flexicontent_authors_ext extends JTable
 	/** @var string */
 	var $author_catparams  = null;
 
-	function flexicontent_authors_ext(& $db) {
+	function __construct(& $db) {
 		parent::__construct('#__flexicontent_authors_ext', 'user_id', $db);
 	}
 	
@@ -55,7 +55,7 @@ class flexicontent_authors_ext extends JTable
 		if (!$row) {
 			$query = "INSERT INTO #__flexicontent_authors_ext (`user_id`) VALUES ('". (int) $this->user_id ."')";
 			$this->_db->setQuery($query);
-			if ( ! $this->_db->query() ) {
+			if ( ! $this->_db->execute() ) {
 				$this->_error = 'Database error while creating author extended data row for user_id: '. (int) $this->user_id. ' DB ERROR: '.$this->_db->getErrorMsg();
 				JError::raiseWarning('SOME_ERROR_CODE', $this->_error );
 				return false;

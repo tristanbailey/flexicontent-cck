@@ -44,7 +44,6 @@ $subcat_image_method = $this->params->get('subcat_image_method', 1);
 $subcat_image_width = $this->params->get('subcat_image_width', 80);
 $subcat_image_height = $this->params->get('subcat_image_height', 80);
 
-if (!FLEXI_J16GE) jimport( 'joomla.html.parameter' );
 $app = JFactory::getApplication();
 $joomla_image_path = $app->getCfg('image_path',  FLEXI_J16GE ? '' : 'images'.DS.'stories' );
 $joomla_image_url  = str_replace (DS, '/', $joomla_image_path);
@@ -148,10 +147,11 @@ switch ($cols)
 			$w		= '&amp;w=' . $cat_image_width;
 			$aoe	= '&amp;aoe=1';
 			$q		= '&amp;q=95';
+			$ar 	= '&amp;ar=x';
 			$zc		= $cat_image_method ? '&amp;zc=' . $cat_image_method : '';
-			$ext = pathinfo($src, PATHINFO_EXTENSION);
+			$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 			$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-			$conf	= $w . $h . $aoe . $q . $zc . $f;
+			$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 	
 			$image = JURI::base(true).'/components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$src.$conf;
 		} else if ( $cat_image_source!=1 && $src = flexicontent_html::extractimagesrc($cat) ) {
@@ -160,10 +160,11 @@ switch ($cols)
 			$w		= '&amp;w=' . $cat_image_width;
 			$aoe	= '&amp;aoe=1';
 			$q		= '&amp;q=95';
+			$ar 	= '&amp;ar=x';
 			$zc		= $cat_image_method ? '&amp;zc=' . $cat_image_method : '';
-			$ext = pathinfo($src, PATHINFO_EXTENSION);
+			$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 			$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-			$conf	= $w . $h . $aoe . $q . $zc . $f;
+			$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 
 			$base_url = (!preg_match("#^http|^https|^ftp|^/#i", $src)) ?  JURI::base(true).'/' : '';
 			$image = JURI::base(true).'/components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$base_url.$src.$conf;
@@ -207,7 +208,14 @@ switch ($cols)
 			<li class='fcsubcat <?php echo $oddeven; ?>' >
 				<a class='fcsubcat_title'  href="<?php echo JRoute::_( FlexicontentHelperRoute::getCategoryRoute($subcat->slug) ); ?>"><?php echo $this->escape($subcat->title); ?></a>
 				<?php if ($showassignated) : ?>
-				<span class="fcsubcat_assigned small"><?php echo $subcat->assignedsubitems != null ? '('.$subcat->assignedsubitems.'/'.$subcat->assignedcats.')' : '(0/'.$subcat->assignedcats.')'; ?></span>
+				<span class="fcsubcat_assigned small nowrap_box">
+					<?php echo '[ <b>'
+						.($subcat->assignedsubitems ? '<span class="fcdir-cntitems">'.$subcat->assignedsubitems.'</span> <i class="icon-list-2 fcdir-icon-itemscnt"></i>' : '')
+						.($subcat->assignedsubitems && $subcat->assignedcats ? '<span class="fcdir-cnt-sep"></span> ' : '')
+						.($subcat->assignedcats ? '<span class="fcdir-subcatscnt">'.$subcat->assignedcats.'</span> <i class="icon-folder fcdir-icon-subcatscnt"></i>' : '')
+						.'</b> ]';
+					?>
+				</span>
 				<?php endif; ?>
 
 			<?php 
@@ -227,7 +235,7 @@ switch ($cols)
 					$aoe	= '&amp;aoe=1';
 					$q		= '&amp;q=95';
 					$zc		= $subcat_image_method ? '&amp;zc=' . $subcat_image_method : '';
-					$ext = pathinfo($src, PATHINFO_EXTENSION);
+					$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 					$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
 					$conf	= $w . $h . $aoe . $q . $zc . $f;
 			
@@ -239,7 +247,7 @@ switch ($cols)
 					$aoe	= '&amp;aoe=1';
 					$q		= '&amp;q=95';
 					$zc		= $subcat_image_method ? '&amp;zc=' . $subcat_image_method : '';
-					$ext = pathinfo($src, PATHINFO_EXTENSION);
+					$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 					$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
 					$conf	= $w . $h . $aoe . $q . $zc . $f;
 		
@@ -282,4 +290,4 @@ switch ($cols)
 		endif;
 endforeach; ?>
 </div>
-<div class="clear"></div>
+<div class="fcclear"></div>

@@ -6,23 +6,57 @@
 	<license>GPLv3</license>
 	<version>1.2</version>
 	<release>20 May 2014</release>
-	<description>This HTML5 layout presents category items in a table. Each field put in the table position will be rendered as a column</description>
+	<microdata_support>1</microdata_support>
+
+	<defaulttitle>FLEXI_TMPL_DEFAULT_CATEGORY_DEFAULT_TITLE</defaulttitle>
+	<description>FLEXI_TMPL_DEFAULT_CATEGORY_SHORT_DESC</description>
+
 	<fields name="attribs">
 		<fieldset name="attribs" addfieldpath="/administrator/components/com_flexicontent/elements">
-		<field name="show_field_labels_row" type="radio" default="" label="FLEXI_SHOW_LABELS_ROW" description="FLEXI_SHOW_LABELS_ROW_DESC" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_NO</option>
-			<option value="1">FLEXI_YES</option>
-		</field>
 		
-		<field name="templatehtmlmode" type="separator" hr="false" default="FLEXI_TEMPLATE_HTML_MODE" level="level2" menu="hide" />
-		<field name="htmlmode" type="radio" default="" label="FLEXI_HTML_MODE" description="FLEXI_HTML_MODE_DESC" filter="int" class="btn-group btn-group-yesno">
-			<option value="">FLEXI_USE_GLOBAL</option>
-			<option value="0">FLEXI_XHTML</option>
-			<option value="1">FLEXI_HTML5</option>
-		</field>
+			<field name="custom_layout_title" type="text" size="3" not_inherited="1" default="" label="FLEXI_LAYOUT_CUSTOM_DISPLAY_TITLE" description="FLEXI_LAYOUT_CUSTOM_DISPLAY_TITLE_DESC" />
+			
+			<field name="title_grp" type="separator" cssprep="1" default="FLEXI_TMPL_ITEM_TITLE" description="" level="level2" />
+			<field name="title_color" type="color" cssprep="less" default="inherit" label="Title color" description="Color of title" />
+			
+			<field name="label_styling_grp" type="separator" cssprep="1" default="FLEXI_TMPL_LABEL_STYLING" description="" level="level2" />
+			<field name="label_bg_color" type="color" cssprep="less" default="#999999" label="FLEXI_TMPL_LABEL_BG" description="FLEXI_TMPL_LABEL_BG_DESC" />
+			<field name="label_txt_color" type="color" cssprep="less" default="#ffffff" label="FLEXI_TMPL_LABEL_TXT_COLOR" description="FLEXI_TMPL_LABEL_TXT_COLOR_DESC" />
+			<field name="label_radius" type="number" cssprep="less" default="3" label="FLEXI_TMPL_LABEL_RADIUS" description="FLEXI_TMPL_LABEL_RADIUS_DESC" min="0" max="80" step="1" />
+			
+			<field name="table_color_grp" type="separator" cssprep="1" default="FLEXI_TMPL_TABLE_STYLING" description="" level="level2" />
+			<field name="table_row0_bg_color" type="color" cssprep="less" default="#ffffff" label="FLEXI_TMPL_TABLE_ROW0_BG" description="FLEXI_TMPL_TABLE_ROW0_BG_DESC" />
+			<field name="table_row1_bg_color" type="color" cssprep="less" default="#f7f7f7" label="FLEXI_TMPL_TABLE_ROW1_BG" description="FLEXI_TMPL_TABLE_ROW0_BG_DESC" />
+			<field name="table_value_color" type="color" cssprep="less" default="#555555" label="FLEXI_TMPL_TABLE_TEXT_COLOR" description="FLEXI_TMPL_TABLE_TEXT_COLOR_DESC" />
+			
+			<field name="disp_params" type="separator" default="FLEXI_DISPLAY" level="level1" menu="hide" />
+			<field name="show_field_labels_row" type="radio" default="" label="FLEXI_SHOW_LABELS_ROW" description="FLEXI_SHOW_LABELS_ROW_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_NO</option>
+				<option value="1">FLEXI_YES</option>
+			</field>
+			<field name="customize_titlecol_header" type="radio" default="" label="FLEXI_CUSTOMIZE_TITLE_COLUMN_HEADER" description="FLEXI_CUSTOMIZE_TITLE_COLUMN_HEADER_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_NO</option>
+				<option value="1">FLEXI_YES</option>
+			</field>
+			<field name="titlecol_header_text" type="text" default="" label="FLEXI_TITLE_COLUMN_HEADER_TEXT" description="FLEXI_TITLE_COLUMN_HEADER_TEXT_DESC" />
+			<field name="togglable_table_cols" type="radio" default="" label="FLEXI_TMPL_DEFAULT_TOGGLABLE_TABLE_COLS" description="FLEXI_TMPL_DEFAULT_TOGGLABLE_TABLE_COLS_DESC" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_NO</option>
+				<option value="1">FLEXI_YES</option>
+			</field>
+			
+			<field name="templatehtmlmode" type="separator" default="FLEXI_TEMPLATE_HTML_MODE" level="level2" menu="hide" />
+			<field name="htmlmode" type="radio" default="" label="FLEXI_HTML_MODE" description="FLEXI_HTML_MODE_DESC" filter="int" class="btn-group btn-group-yesno">
+				<option value="">FLEXI_USE_GLOBAL</option>
+				<option value="0">FLEXI_XHTML</option>
+				<option value="1">FLEXI_HTML5</option>
+			</field>
+			
 		</fieldset>
 	</fields>
+	
 	<fieldgroups>
 		<group>table</group>
 		<group>renderonly</group>

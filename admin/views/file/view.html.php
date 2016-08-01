@@ -18,7 +18,7 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * View class for the FLEXIcontent file screen
@@ -37,28 +37,22 @@ class FlexicontentViewFile extends JViewLegacy {
 		$user     = JFactory::getUser();
 		//$authorparams = flexicontent_db::getUserConfig($user->id);
 
-		//add css to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
-
+		//add css/js to document
+		flexicontent_html::loadFramework('select2');
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
 		//create the toolbar
 		JToolBarHelper::title( JText::_( 'FLEXI_EDIT_FILE' ), 'fileedit' );
 		
-		if (FLEXI_J16GE) {
-			JToolBarHelper::apply('filemanager.apply');
-			JToolBarHelper::save('filemanager.save');
-			JToolBarHelper::cancel('filemanager.cancel');
-		} else {
-			JToolBarHelper::apply();
-			JToolBarHelper::save();
-			JToolBarHelper::cancel();
-		}
+		JToolBarHelper::apply('filemanager.apply');
+		JToolBarHelper::save('filemanager.save');
+		JToolBarHelper::cancel('filemanager.cancel');
+		
 		//Get data from the model
-		$model		= $this->getModel();
-		if (FLEXI_J16GE) $form = $this->get('Form');
-		$row     	= $this->get( 'File' );
+		$model = $this->getModel();
+		$form  = $this->get('Form');
+		$row   = $this->get('File');
 		
 		// fail if checked out not by 'me'
 		if ($row->id) {
@@ -69,29 +63,19 @@ class FlexicontentViewFile extends JViewLegacy {
 		}
 		
 		//build access level list
-		if (FLEXI_J16GE) {
-			$lists['access'] 	= JHTML::_('access.assetgrouplist', 'access', $row->access);
-		} else if (FLEXI_ACCESS) {
-			$lists['access']	= FAccess::TabGmaccess( $row, 'field', 1, 0, 0, 0, 0, 0, 0, 0, 0 );
-		} else {
-			$lists['access'] 	= JHTML::_('list.accesslevel', $row );
-		}
+		$lists['access'] 	= JHTML::_('access.assetgrouplist', 'access', $row->access, $config=array('class'=>'use_select2_lib'));
 		
 		// Build languages list
 		//$allowed_langs = !$authorparams ? null : $authorparams->get('langs_allowed',null);
 		//$allowed_langs = !$allowed_langs ? null : FLEXIUtilities::paramToArray($allowed_langs);
 		$allowed_langs = null;
-		if (FLEXI_FISH || FLEXI_J16GE) {
-			$lists['language'] = flexicontent_html::buildlanguageslist('language', '', $row->language, 3, $allowed_langs, $published_only=false);
-		} else {
-			$lists['language'] = flexicontent_html::getSiteDefaultLang() . '<input type="hidden" name="language" value="'.flexicontent_html::getSiteDefaultLang().'" />';
-		}
+		$lists['language'] = flexicontent_html::buildlanguageslist('language', ' class="use_select2_lib" ', $row->language, 2, $allowed_langs, $published_only=false);
 		
-		//clean data
-		JFilterOutput::objectHTMLSafe( $row, ENT_QUOTES );
+		// Encode (UTF-8 charset) HTML entities form data so that they can be set as form field values
+		JFilterOutput::objectHTMLSafe( $row, ENT_QUOTES, $exclude_keys = '' );
 
 		//assign data to template
-		if (FLEXI_J16GE) $this->assignRef('form'				, $form);
+		$this->assignRef('form'				, $form);
 		$this->assignRef('row'				, $row);
 		$this->assignRef('lists'			, $lists);
 		$this->assignRef('document'		, $document);

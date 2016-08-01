@@ -12,7 +12,7 @@ defined('_JEXEC') or die;
 JHtml::addIncludePath(JPATH_COMPONENT.'/helpers/html');
 
 // Load the tooltip behavior.
-JHtml::_('behavior.tooltip');
+//JHtml::_('behavior.tooltip');
 JHtml::_('behavior.formvalidation');
 $canDo = UsersHelper::getActions();
 ?>
@@ -26,18 +26,22 @@ $canDo = UsersHelper::getActions();
 	}
 </script>
 
-<form action="<?php echo JRoute::_('index.php?option=com_flexicontent&layout=edit&id='.(int) $this->item->id); ?>" method="post" name="adminForm" id="group-form" class="form-validate">
+<form action="<?php echo JRoute::_('index.php?option=com_flexicontent&layout=edit&id='.(int) $this->item->id); ?>" method="post" name="adminForm" id="adminForm" class="form-validate">
 	<div class="width-100">
-		<fieldset class="adminform">
+		<fieldset>
 			<legend><?php echo JText::_('COM_USERS_USERGROUP_DETAILS');?></legend>
-			<ul class="adminformlist">
-				<li><?php echo $this->form->getLabel('title'); ?>
-				<?php echo $this->form->getInput('title'); ?></li>
-
+			<table class="fc-form-tbl">
+				<tr>
+					<td class="key"><?php echo $this->form->getLabel('title'); ?></td>
+					<td><?php echo $this->form->getInput('title'); ?></td>
+				</tr>
+				
 				<?php $parent_id = $this->form->getField('parent_id');?>
-				<li><?php if (!$parent_id->hidden) echo $parent_id->label; ?>
-				<?php echo $parent_id->input; ?></li>
-			</ul>
+				<tr>
+					<td class="key"><?php if (!$parent_id->hidden) echo $parent_id->label; ?></td>
+					<td><?php echo $parent_id->input; ?></td>
+				</tr>
+			</table>
 		</fieldset>
 		<input type="hidden" name="task" value="" />
 		<?php echo JHtml::_('form.token'); ?>

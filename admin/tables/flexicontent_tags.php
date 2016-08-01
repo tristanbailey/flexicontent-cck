@@ -31,19 +31,19 @@ class flexicontent_tags extends JTable
 	 * Primary Key
 	 * @var int
 	 */
-	var $id 				= null;
+	var $id						= null;
 	/** @var string */
-	var $name				= '';
+	var $name					= '';
 	/** @var string */
 	var $alias				= '';
 	/** @var int */
-	var $published			= null;
+	var $published		= null;
 	/** @var int */
-	var $checked_out 		= 0;
+	var $checked_out	= 0;
 	/** @var date */
 	var $checked_out_time	= '';
 
-	function flexicontent_tags(& $db) {
+	function __construct(& $db) {
 		parent::__construct('#__flexicontent_tags', 'id', $db);
 	}
 	

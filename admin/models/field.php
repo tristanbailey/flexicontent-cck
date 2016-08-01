@@ -19,7 +19,7 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.modeladmin');
+jimport('legacy.model.admin');
 
 /**
  * FLEXIcontent Component Field Model
@@ -52,34 +52,46 @@ class FlexicontentModelField extends JModelAdmin
 	function __construct()
 	{
 		parent::__construct();
+		
+		$jinput = JFactory::getApplication()->input;
 
-		$array = JRequest::getVar('cid',  array(0), '', 'array');
-		$array = is_array($array) ? $array : array($array);
-		$id = $array[0];
-		if(!$id) {
-			$post = JRequest::get( 'post' );
-			$data = FLEXI_J16GE ? @$post['jform'] : $post;
-			$id = @$data['id'];
+		$id = $jinput->get('id', array(0), 'array');
+		JArrayHelper::toInteger($id, array(0));
+		$pk = (int) $id[0];
+
+		if (!$pk)
+		{
+			$cid = $jinput->get('cid', array(0), 'array');
+			JArrayHelper::toInteger($cid, array(0));
+			$pk = (int) $cid[0];
 		}
-		$this->setId((int)$id);
+		
+		if (!$pk)
+		{
+			$data = $jinput->get('jform', array('id'=>0), 'array');
+			$pk = (int) $data['id'];
+		}
+		$this->setId((int)$pk);
+
+		$this->populateState();
 	}
 
 	/**
 	 * Method to set the identifier
 	 *
 	 * @access	public
-	 * @param	int field identifier
+	 * @param	int record identifier
 	 */
 	function setId($id)
 	{
-		// Set field id and wipe data
+		// Set record id and wipe data
 		$this->_id     = $id;
 		$this->_field  = null;
 	}
 	
 
 	/**
-	 * Method to get the field identifier
+	 * Method to get the record identifier
 	 *
 	 * @access	public
 	 */
@@ -88,7 +100,7 @@ class FlexicontentModelField extends JModelAdmin
 	}
 	
 	/**
-	 * Overridden get method to get properties from the field
+	 * Overridden get method to get properties from the record
 	 *
 	 * @access	public
 	 * @param	string	$property	The name of the property
@@ -108,7 +120,7 @@ class FlexicontentModelField extends JModelAdmin
 	}
 
 	/**
-	 * Method to get field data
+	 * Method to get record data
 	 *
 	 * @access	public
 	 * @return	array
@@ -128,7 +140,7 @@ class FlexicontentModelField extends JModelAdmin
 
 
 	/**
-	 * Method to load field data
+	 * Method to load record data
 	 *
 	 * @access	private
 	 * @return	boolean	True on success
@@ -136,7 +148,7 @@ class FlexicontentModelField extends JModelAdmin
 	 */
 	function _loadField()
 	{
-		// Lets load the field if it doesn't already exist
+		// Lets load the record if it doesn't already exist
 		if ( $this->_field===null )
 		{
 			$query = 'SELECT *'
@@ -170,7 +182,7 @@ class FlexicontentModelField extends JModelAdmin
 	}
 
 	/**
-	 * Method to initialise the field data
+	 * Method to initialise the record data
 	 *
 	 * @access	private
 	 * @return	boolean	True on success
@@ -178,7 +190,7 @@ class FlexicontentModelField extends JModelAdmin
 	 */
 	function _initField()
 	{
-		// Lets load the field if it doesn't already exist
+		// Lets load the record if it doesn't already exist
 		if ( $this->_field===null )
 		{
 			$field = new stdClass();
@@ -207,7 +219,7 @@ class FlexicontentModelField extends JModelAdmin
 	}
 
 	/**
-	 * Method to checkin/unlock the field
+	 * Method to checkin/unlock the record
 	 *
 	 * @access	public
 	 * @return	boolean	True on success
@@ -216,16 +228,18 @@ class FlexicontentModelField extends JModelAdmin
 	function checkin($pk = NULL)
 	{
 		if (!$pk) $pk = $this->_id;
-		if ($pk) {
-			$item = JTable::getInstance('flexicontent_fields', '');
-			return $item->checkin($pk);
+
+		if ($pk)
+		{
+			$tbl = JTable::getInstance('flexicontent_fields', '');
+			return $tbl->checkin($pk);
 		}
 		return false;
 	}
 	
 	
 	/**
-	 * Method to checkout/lock the field
+	 * Method to checkout/lock the record
 	 *
 	 * @access	public
 	 * @param	int	$uid	User ID of the user checking the item out
@@ -253,7 +267,7 @@ class FlexicontentModelField extends JModelAdmin
 	
 	
 	/**
-	 * Tests if the field is checked out
+	 * Tests if the record is checked out
 	 *
 	 * @access	public
 	 * @param	int	A user id
@@ -278,7 +292,7 @@ class FlexicontentModelField extends JModelAdmin
 	}
 
 	/**
-	 * Method to store the field
+	 * Method to store the record
 	 *
 	 * @access	public
 	 * @return	boolean	True on success
@@ -362,11 +376,8 @@ class FlexicontentModelField extends JModelAdmin
 			return false;
 		}
 		
-		if (FLEXI_ACCESS) {
-			FAccess::saveaccess( $field, 'field' );
-		} else if (FLEXI_J16GE) {
-			// saving asset in J2.5 is handled by the fields table class
-		}
+		// Saving asset in J2.5 is handled by the fields table class
+		// ...
 		
 		$this->_field = & $field;
 		$this->_id    = $field->id;
@@ -376,6 +387,7 @@ class FlexicontentModelField extends JModelAdmin
 		
 		return true;
 	}
+
 
 	/**
 	 * Method to assign types to a field
@@ -395,7 +407,7 @@ class FlexicontentModelField extends JModelAdmin
 				. ' FROM #__flexicontent_types'
 				;
 			$this->_db->setQuery($query);
-			$types = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+			$types = $this->_db->loadColumn();
 		}
 		
 		// Store field to types relations
@@ -405,7 +417,7 @@ class FlexicontentModelField extends JModelAdmin
 			. (!empty($types) ? ' AND type_id NOT IN (' . implode(', ', $types) . ')' : '')
 			;
 		$this->_db->setQuery($query);
-		$this->_db->query();
+		$this->_db->execute();
 		
 		// draw an array of the used types
 		$query 	= 'SELECT type_id'
@@ -413,7 +425,7 @@ class FlexicontentModelField extends JModelAdmin
 			. ' WHERE field_id = '.$field->id
 			;
 		$this->_db->setQuery($query);
-		$used = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+		$used = $this->_db->loadColumn();
 		
 		foreach($types as $type)
 		{
@@ -431,29 +443,24 @@ class FlexicontentModelField extends JModelAdmin
 					.' VALUES(' . $field->id . ',' . $type . ', ' . $ordering . ')'
 					;
 				$this->_db->setQuery($query);
-				$this->_db->query();
+				$this->_db->execute();
 			}
 		}
 	}
 
+
 	/**
-	 * Method to get types list when performing an edit action
+	 * Method to get types list
 	 * 
 	 * @return array
 	 * @since 1.5
 	 */
-	function getTypeslist()
+	function getTypeslist ( $type_ids=false, $check_perms = false, $published=false )
 	{
-		$query = 'SELECT id, name'
-			. ' FROM #__flexicontent_types'
-			. ' WHERE published = 1'
-			. ' ORDER BY name ASC'
-			;
-		$this->_db->setQuery($query);
-		$types = $this->_db->loadObjectList();
-		return $types;	
+		return flexicontent_html::getTypesList( $type_ids, $check_perms, $published);
 	}
-	
+
+
 	/**
 	 * Method to get used types when performing an edit action
 	 * 
@@ -464,20 +471,24 @@ class FlexicontentModelField extends JModelAdmin
 	{
 		$query = 'SELECT DISTINCT type_id FROM #__flexicontent_fields_type_relations WHERE field_id = ' . (int)$this->_id;
 		$this->_db->setQuery($query);
-		$used = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+		$used = $this->_db->loadColumn();
+
 		return $used;
 	}
-	
-		
+
+
 	/**
 	 * Method to get the row form.
 	 *
-	 * @param	array	$data		Data for the form.
-	 * @param	boolean	$loadData	True if the form is to load its own data (default case), false if not.
-	 * @return	mixed	A JForm object on success, false on failure
-	 * @since	1.6
+	 * @param   array    $data      An optional array of data for the form to interogate.
+	 * @param   boolean  $loadData  True if the form is to load its own data (default case), false if not.
+	 *
+	 * @return  mixed  A JForm object on success, false on failure
+	 *
+	 * @since   1.6
 	 */
-	public function getForm($data = array(), $loadData = true) {
+	public function getForm($data = array(), $loadData = true)
+	{
 		// Initialise variables.
 		$app = JFactory::getApplication();
 
@@ -486,81 +497,111 @@ class FlexicontentModelField extends JModelAdmin
 		if (empty($form)) {
 			return false;
 		}
+		$form->option = $this->option;
+		$form->context = $this->getName();
 
 		return $form;
 	}
-	
+
+
 	/**
 	 * Method to get the data that should be injected in the form.
 	 *
-	 * @return	mixed	The data for the form.
-	 * @since	1.6
+	 * @return  mixed  The data for the form.
+	 *
+	 * @since   1.6
 	 */
-	protected function loadFormData() {
+	protected function loadFormData()
+	{
 		// Check the session for previously entered form data.
-		$data = JFactory::getApplication()->getUserState('com_flexicontent.edit.'.$this->getName().'.data', array());
+		$app = JFactory::getApplication();
+		$data = $app->getUserState('com_flexicontent.edit.'.$this->getName().'.data', array());
+
+		// Clear form data from session ?
+		$app->setUserState('com_flexicontent.edit.'.$this->getName().'.data', false);
 
 		if (empty($data)) {
 			$data = $this->getItem($this->_id);
 		}
 
+		$this->preprocessData('com_flexicontent.'.$this->getName(), $data);
+		
 		return $data;
 	}
-	
+
+
 	/**
 	 * Method to get a single record.
 	 *
-	 * @param	integer	$pk	The id of the primary key.
+	 * @param   integer  $pk  The id of the primary key.
 	 *
-	 * @return	mixed	Object on success, false on failure.
-	 * @since	1.6
+	 * @return  mixed	Object on success, false on failure.
+	 *
+	 * @since   1.6
 	 */
-	public function getItem($pk = null) {
-		static $item;
-		if(!$item) {
-			// Initialise variables.
-			$pk		= (!empty($pk)) ? $pk : (int) $this->getState($this->getName().'.id');
-			$table	= $this->getTable('flexicontent_fields', '');
+	public function getItem($pk = null)
+	{
+		$pk = $pk ? (int) $pk : $this->_id;
+		$pk = $pk ? $pk : (int) $this->getState($this->getName().'.id');
+		
+		static $items = array();
+		if ( $pk && isset($items[$pk]) ) return $items[$pk];
+		
+		// Instatiate the JTable
+		$table	= $this->getTable('flexicontent_fields', '');
 
-			if ($pk > 0) {
-				// Attempt to load the row.
-				$return = $table->load($pk);
+		if ($pk > 0)
+		{
+			// Attempt to load the row.
+			$return = $table->load($pk);
 
-				// Check for a table object error.
-				if ($return === false && $table->getError()) {
-					$this->setError($table->getError());
-					return false;
-				}
-			} else {
-				$table->name					= 'field' . ($this->_getLastId() + 1);
+			// Check for a table object error.
+			if ($return === false && $table->getError()) {
+				$this->setError($table->getError());
+				return false;
 			}
-
-			// Convert to the JObject before adding other data.
-			$_prop_arr = $table->getProperties(1);
-			$item = JArrayHelper::toObject($_prop_arr, 'JObject');
-			if ($pk > 0) {
-				$item->tid = $this->getTypesselected();
-			}
-
-			if (property_exists($item, 'attribs')) {
-				$registry = new JRegistry();
-				$registry->loadString($item->attribs, 'JSON');
-				$item->attribs = $registry->toArray();
-			}
-			$field_type = $pk ? $table->field_type : JRequest::getVar('field_type', 'text');
-			$this->setState('field.field_type', $field_type);
 		}
+		else
+		{
+			$table->name = 'field' . ($this->_getLastId() + 1);
+		}
+
+		// Convert to the JObject before adding other data.
+		$_prop_arr = $table->getProperties(1);
+		$item = JArrayHelper::toObject($_prop_arr, 'JObject');
+		if ($pk > 0)
+		{
+			$item->tid = $this->getTypesselected();
+		}
+
+		if (property_exists($item, 'attribs'))
+		{
+			$registry = new JRegistry($item->attribs);
+			$item->attribs = $registry->toArray();
+		}
+
+		$field_type = JRequest::getVar('field_type', ($pk ? $table->field_type : 'text'));
+		$this->setState('field.field_type', $field_type);
+
+		if ($pk) $items[$pk] = $item;
 		return $item;
 	}
-	
+
+
 	/**
-	 * @param	object	A form object.
-	 * @param	mixed	The data expected for the form.
-	 * @return	mixed	True if successful.
-	 * @throws	Exception if there is an error in the form event.
-	 * @since	1.6
+	 * Override JModelAdmin::preprocessForm to ensure the correct plugin group is loaded.
+	 *
+	 * @param   JForm   $form   A JForm object.
+	 * @param   mixed   $data   The data expected for the form.
+	 * @param   string  $group  The name of the plugin group to import (defaults to "content").
+	 *
+	 * @return  void
+	 *
+	 * @since   1.6
+	 * @throws  Exception if there is an error in the form event.
 	 */
-	protected function preprocessForm(JForm $form, $data, $group = 'content') {
+	protected function preprocessForm(JForm $form, $data, $group = 'content')
+	{
 		jimport('joomla.filesystem.file');
 		jimport('joomla.filesystem.folder');
 
@@ -607,9 +648,10 @@ class FlexicontentModelField extends JModelAdmin
 		}
 
 		// Trigger the default form events.
-		parent::preprocessForm($form, $data);
+		parent::preprocessForm($form, $data, $plugin_type='_none_');  // by default content plugins are imported, skip them
 	}
-	
+
+
 	/**
 	 * Auto-populate the model state.
 	 *
@@ -617,20 +659,28 @@ class FlexicontentModelField extends JModelAdmin
 	 *
 	 * @since	1.6
 	 */
-	protected function populateState() {
+	protected function populateState()
+	{
 		$app = JFactory::getApplication('administrator');
 
 		if (!($extension = $app->getUserState('com_flexicontent.edit.'.$this->getName().'.extension'))) {
 			$extension = JRequest::getCmd('extension', 'com_flexicontent');
 		}
-		// Load the User state.
-		if (!($pk = (int) $app->getUserState('com_flexicontent.edit.'.$this->getName().'.id'))) {
-			$cid = JRequest::getVar('cid', array(0));
-			$pk = (int)@$cid[0];
+		
+		// Get id from user state
+		$pk = $this->_id;
+		if ( !$pk ) {
+			$cid = $app->getUserState('com_flexicontent.edit.'.$this->getName().'.id');
+			JArrayHelper::toInteger($cid, array(0));
+			$pk = $cid[0];
+		}
+		if ( !$pk ) {
+			$cid = JRequest::getVar( 'cid', array(0), $hash='default', 'array' );
+			JArrayHelper::toInteger($cid, array(0));
+			$pk = $cid[0];
 		}
 		$this->setState($this->getName().'.id', $pk);
-
-
+		
 		$this->setState('com_flexicontent.'.$this->getName().'.extension', $extension);
 		$parts = explode('.',$extension);
 		// extract the component name
@@ -644,13 +694,14 @@ class FlexicontentModelField extends JModelAdmin
 	}
 	
 	/**
-	 * Method to get field attributes
+	 * Method to get record attributes
 	 *
 	 * Note. Calling getState in this method will result in recursion.
 	 *
 	 * @since	1.6
 	 */
-	public function getAttribs() {
+	public function getAttribs()
+	{
 		if($this->_field) {
 			return $this->_field->attribs;
 		}

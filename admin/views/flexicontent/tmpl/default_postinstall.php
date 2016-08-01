@@ -147,7 +147,7 @@ defined( '_JEXEC' ) or die( 'Restricted access' );
 		}
 	});
 <?php endif; ?>
-<?php if( !empty($this->existdbindexes) ) : ?>
+<?php if(!$this->existdbindexes) : ?>
 	$('existdbindexes').addEvent('click', function(e) {
 		//e = new Event(e).stop();
 		var url = "index.php?option=com_flexicontent&task=createdbindexes&format=raw&<?php echo (FLEXI_J30GE ? JSession::getFormToken() : JUtility::getToken());?>=1&tmpl=component";
@@ -273,22 +273,22 @@ defined( '_JEXEC' ) or die( 'Restricted access' );
 		}
 	});
 <?php endif; ?>
-<?php if (!$this->oldbetafiles) : ?>
-$('oldbetafiles').addEvent('click', function(e) {
+<?php if (!$this->deprecatedfiles) : ?>
+$('deprecatedfiles').addEvent('click', function(e) {
 		//e = new Event(e).stop();
-		var url = "index.php?option=com_flexicontent&task=deleteoldfiles&format=raw&<?php echo (FLEXI_J30GE ? JSession::getFormToken() : JUtility::getToken());?>=1&tmpl=component";
+		var url = "index.php?option=com_flexicontent&task=deletedeprecatedfiles&format=raw&<?php echo (FLEXI_J30GE ? JSession::getFormToken() : JUtility::getToken());?>=1&tmpl=component";
 		if(MooTools.version>="1.2.4") {
-			$('oldbetafiles-log').set('html', ajaxloader);
+			$('deprecatedfiles-log').set('html', ajaxloader);
 			new Request.HTML({
 				url: url,
 				method: 'get',
-				update: $('oldbetafiles-log')
+				update: $('deprecatedfiles-log')
 			}).send();
 		}else{
-			$('oldbetafiles-log').set('html',ajaxloader);
+			$('deprecatedfiles-log').set('html',ajaxloader);
 			var ajax = new Ajax(url, {
 				method: 'get',
-				update: $('oldbetafiles-log')
+				update: $('deprecatedfiles-log')
 			});
 			ajax.request.delay(500, ajax);
 		}
@@ -365,7 +365,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_PUBLISH_ALL_PLUGINS' ); ?>
 		</td>
 		<td id="publishplugins-log">
-			<?php echo $this->allplgpublish ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="publishplugins" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->allplgpublish ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="publishplugins" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -373,15 +373,15 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_INSTALL_DEFAULT_TYPE' ); ?>
 		</td>
 		<td id="existtype-log">
-			<?php echo $this->existtype ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existtype" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existtype ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existtype" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
 		<td class="key">
-			<?php echo JText::_( 'Default Menu Item for URLs' ); ?>
+			<?php echo JText::_( 'Add/update default Menu Item for URLs' ); ?>
 		</td>
 		<td id="existmenuitems-log">
-			<?php echo $this->existmenuitems ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existmenuitems" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existmenuitems ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existmenuitems" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -389,7 +389,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_INSTALL_DEFAULT_FIELDS' ); ?>
 		</td>
 		<td id="existfields-log">
-			<?php echo $this->existfields ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existfields" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existfields ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existfields" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -397,7 +397,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_INSTALL_MCATS_RELATIONS' ); ?>
 		</td>
 		<td id="existcats-log">
-			<?php echo $this->existcats ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existcats" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existcats ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existcats" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -405,17 +405,17 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_INSTALL_MULTILINGUAL_SUPPORT' ); ?>
 		</td>
 		<td id="existlang-log">
-			<?php echo $this->existlang ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existlang" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existlang ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existlang" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
 		<td class="key">
 			<?php echo JText::_( 'FLEXI_CREATE_DB_INDEXES' ); ?>
 			<?php
-				if (!empty($this->existdbindexes)) {
-					echo "<br/><span class='fc-mssg-inline fc-mssg fc-note'>this may take a long time on big web-sites, if it timeouts (or takes >5 min) then please refresh, and click to create remaining indexes</span>";
-					echo "<br># tables: ". count($this->existdbindexes) ." : ";
-					foreach($this->existdbindexes as $tblname => $indexes) {
+				if (!$this->existdbindexes) {
+					echo "<br/><span class='fc-mssg-inline fc-mssg fc-note'>this may take a long time on big web-sites, if it timeouts (or takes >2 min) then please refresh, and click to create remaining indexes</span>";
+					echo "<br># tables: ". count($this->missingindexes) ." : ";
+					foreach($this->missingindexes as $tblname => $indexes) {
 						if ( isset($indexes['__indexing_started__']) ) {
 							echo "<br/><b>" .$tblname. "</b> (<small style='color:green'>Indexing started</small>)";
 						} else {
@@ -426,7 +426,7 @@ $('missingversion').addEvent('click', function(e) {
 			?>
 		</td>
 		<td id="existdbindexes-log">
-			<?php echo empty($this->existdbindexes) ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existdbindexes" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existdbindexes ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existdbindexes" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -434,7 +434,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_INSTALL_VERSIONS_TABLE' ); ?>
 		</td>
 		<td id="existversions-log">
-			<?php echo $this->existversions ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existversions" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existversions ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existversions" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -442,7 +442,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_UPDATE_VERSIONS_DATA' ); ?>
 		</td>
 		<td id="existversionsdata-log">
-			<?php echo $this->existversionsdata ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existversionsdata" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existversionsdata ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existversionsdata" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -450,7 +450,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_INSTALL_AUTHORS_TABLE' ); ?>
 		</td>
 		<td id="existauthors-log">
-			<?php echo $this->existauthors ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existauthors" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->existauthors ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="existauthors" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -458,7 +458,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_UPDATE_TEMPORARY_ITEM_DATA' ); ?>
 		</td>
 		<td id="itemcountingdok-log">
-			<?php echo $this->itemcountingdok ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="itemcountingdok" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
+			<?php echo $this->itemcountingdok ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="itemcountingdok" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>' ; ?>
 		</td>
 	</tr>
 	<tr>
@@ -466,15 +466,15 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_SET_PHPTHUMB_CACHE_PERMISSIONS' ); ?>
 		</td>
 		<td id="cachethumb-log">
-			<?php echo $this->cachethumb ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="cachethumb" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
+			<?php echo $this->cachethumb ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="cachethumb" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
 		</td>
 	</tr>
 	<tr>
 		<td class="key">
 			<?php echo JText::_( 'FLEXI_CLEANUP_TEMPLATE_FILES' ); ?>
 		</td>
-		<td id="oldbetafiles-log">
-			<?php echo $this->oldbetafiles ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="oldbetafiles" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
+		<td id="deprecatedfiles-log">
+			<?php echo $this->deprecatedfiles ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="deprecatedfiles" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
 		</td>
 	</tr>
 	<tr>
@@ -482,7 +482,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_CLEANUP_TABLES' ); ?>
 		</td>
 		<td id="oldfieldsdata-log">
-			<?php echo $this->nooldfieldsdata ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="oldfieldsdata" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
+			<?php echo $this->nooldfieldsdata ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="oldfieldsdata" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
 		</td>
 	</tr>
 	<tr>
@@ -490,7 +490,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_CURRENT_VERSIONS' ); ?>
 		</td>
 		<td id="missingversion-log">
-			<?php echo $this->missingversion ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="missingversion" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
+			<?php echo $this->missingversion ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="missingversion" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
 		</td>
 	</tr>
 	<tr>
@@ -498,7 +498,7 @@ $('missingversion').addEvent('click', function(e) {
 			<?php echo JText::_( 'FLEXI_INITIAL_PERMISSION' ); ?>
 		</td>
 		<td id="initialpermission-log">
-			<?php echo $this->initialpermission ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="initialpermission" href="#">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
+			<?php echo $this->initialpermission ? '<span class="install-ok"></span>' : '<span class="install-notok"></span><span class="button-add"><a id="initialpermission" href="javascript:;">'.JText::_( 'FLEXI_UPDATE' ).'</a></span>'; ?>
 		</td>
 	</tr>
 </table>

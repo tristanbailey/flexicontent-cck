@@ -19,7 +19,8 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.modeladmin');
+jimport('legacy.model.admin');
+use Joomla\String\StringHelper;
 
 /**
  * FLEXIcontent Component Category Model
@@ -36,7 +37,15 @@ class FlexicontentModelCategory extends JModelAdmin
 	 * @var object
 	 */
 	var $_category = null;
-
+	
+	/**
+	 * Inherited parameters
+	 *
+	 * @var object
+	 */
+	var $_inherited_params = null;
+	
+	
 	/**
 	 * Constructor
 	 *
@@ -45,15 +54,24 @@ class FlexicontentModelCategory extends JModelAdmin
 	function __construct()
 	{
 		parent::__construct();
-
-		$array = JRequest::getVar('cid',  0, '', 'array');
-		if ( !@$array[0] ) {
-			// Try id variable too (needed by J3.0+)
-			$array = JRequest::getVar('id',  0, '', 'array');
+		
+		$cid = JRequest::getVar( 'cid', array(0), $hash='default', 'array' );
+		JArrayHelper::toInteger($cid, array(0));
+		$pk = (int) $cid[0];
+		
+		if (!$pk) {
+			// Try id variable too
+			$cid = JRequest::getVar('id',  0, '', 'array');
+			JArrayHelper::toInteger($cid, array(0));
+			$pk = (int) $cid[0];
 		}
+		
 		// Make sure id variable is set (needed by J3.0+ controller)
-		JRequest::setVar('id', (int)$array[0]);
-		$this->setId((int)$array[0]);
+		JRequest::setVar('id', (int)$pk);
+		
+		$this->setId((int)$pk);
+		
+		$this->populateState();
 	}
 
 	/**
@@ -174,9 +192,11 @@ class FlexicontentModelCategory extends JModelAdmin
 	function checkin($pk = NULL)
 	{
 		if (!$pk) $pk = $this->_id;
-		if ($pk) {
-			$category = $this->getTable();
-			return $category->checkin($pk);
+
+		if ($pk)
+		{
+			$tbl = $this->getTable();
+			return $tbl->checkin($pk);
 		}
 		return false;
 	}
@@ -205,7 +225,7 @@ class FlexicontentModelCategory extends JModelAdmin
 		if ( $tbl->checkout($uid, $this->_id) ) return true;
 		
 		// Reaching this points means checkout failed
-		$this->setError( FLEXI_J16GE ? $tbl->getError() : JText::_("FLEXI_ALERT_CHECKOUT_FAILED") );
+		$this->setError( JText::_("FLEXI_ALERT_CHECKOUT_FAILED") .': '. $tbl->getError() );
 		return false;
 	}
 	
@@ -353,6 +373,13 @@ class FlexicontentModelCategory extends JModelAdmin
 		$this->_id = $table->id;
 		$this->_category = & $table;  // variable reference instead of assigning object id, this will work even if $table is reassigned a different object
 
+		
+		// ****************************
+		// Update language Associations
+		// ****************************
+		$this->saveAssociations($item, $data);
+		
+		
 		// Trigger the onContentAfterSave event.
 		$dispatcher->trigger($this->event_after_save, array($this->option . '.' . $this->name, &$table, $isNew));
 
@@ -405,6 +432,108 @@ class FlexicontentModelCategory extends JModelAdmin
 		}
 	}
 	
+	
+	
+	/**
+	 * Method to load inherited parameters
+	 *
+	 * @access	private
+	 * @return	void
+	 * @since	1.5
+	 */
+	function getInheritedParams($force=false)
+	{
+		if ( $this->_inherited_params !== NULL && !$force ) return $this->_inherited_params;
+		$id = (int)$this->_id;
+		
+		$app  = JFactory::getApplication();
+		
+		// a. Clone component parameters ... we will use these as parameters base for merging
+		$compParams = clone(JComponentHelper::getComponent('com_flexicontent')->params);     // Get the COMPONENT only parameters
+		
+		// b. Retrieve category parameters and create parameter object
+		if ($id) {
+			$query = 'SELECT params FROM #__categories WHERE id = ' . $id;
+			$this->_db->setQuery($query);
+			$catParams = $this->_db->loadResult();
+			$catParams = new JRegistry($catParams);
+		} else {
+			$catParams = new JRegistry();
+		}
+		
+		
+		// c. Retrieve inherited parameter and create parameter objects
+		global $globalcats;
+		$heritage_stack = array();
+		$inheritcid = $catParams->get('inheritcid', '');
+		$inheritcid_comp = $compParams->get('inheritcid', -1);
+		$inherit_parent = $inheritcid==='-1' || ($inheritcid==='' && $inheritcid_comp);
+		
+		// CASE A: inheriting from parent category tree
+		if ( $id && $inherit_parent && !empty($globalcats[$id]->ancestorsonly) ) {
+			$order_clause = 'level';  // 'FIELD(id, ' . $globalcats[$id]->ancestorsonly . ')';
+			$query = 'SELECT title, id, params FROM #__categories'
+				.' WHERE id IN ( ' . $globalcats[$id]->ancestorsonly . ')'
+				.' ORDER BY '.$order_clause.' DESC';
+			$this->_db->setQuery($query);
+			$catdata = $this->_db->loadObjectList('id');
+			if (!empty($catdata)) {
+				foreach ($catdata as $parentcat) {
+					$parentcat->params = new JRegistry($parentcat->params);
+					array_push($heritage_stack, $parentcat);
+					$inheritcid = $parentcat->params->get('inheritcid', '');
+					$inherit_parent = $inheritcid==='-1' || ($inheritcid==='' && $inheritcid_comp);
+					if ( !$inherit_parent ) break; // Stop inheriting from further parent categories
+				}
+			}
+		}
+		
+		// CASE B: inheriting from specific category
+		else if ( $id && $inheritcid > 0 && !empty($globalcats[$inheritcid]) ){
+			$query = 'SELECT title, params FROM #__categories WHERE id = '. $inheritcid;
+			$this->_db->setQuery($query);
+			$catdata = $this->_db->loadObject();
+			if ($catdata) {
+				$catdata->params = new JRegistry($catdata->params);
+				array_push($heritage_stack, $catdata);
+			}
+		}
+		
+		
+		// *******************************************************************************************************
+		// Start merging of parameters, OVERRIDE ORDER: layout(template-manager)/component/ancestors-cats/category
+		// *******************************************************************************************************
+		
+		// -1. layout parameters will be placed on top at end of this code ...
+		
+		// 0. Start from component parameters
+		$params = new JRegistry();
+		$params->merge($compParams);
+		
+		// 1. Merge category's inherited parameters (e.g. ancestor categories or specific category)
+		while (!empty($heritage_stack)) {
+			$catdata = array_pop($heritage_stack);
+			if ($catdata->params->get('orderbycustomfieldid')==="0") $catdata->params->set('orderbycustomfieldid', '');
+			$params->merge($catdata->params);
+		}
+		
+		// 2. Merge category parameters -- CURRENT CATEGORY PARAMETERS MUST BE SKIPED ! we only want the inherited parameters
+		//if ($catParams->get('orderbycustomfieldid')==="0") $catParams->set('orderbycustomfieldid', '');
+		//$params->merge($catParams);
+		
+		// Retrieve Layout's parameters
+		$layoutParams = flexicontent_tmpl::getLayoutparams('category', $params->get('clayout'), '', $force);
+		$layoutParams = new JRegistry($layoutParams);
+		
+		// Allow global layout parameters to be inherited properly, placing on TOP of all others
+		$this->_inherited_params = clone($layoutParams);
+		$this->_inherited_params->merge($params);
+		
+		return $this->_inherited_params;
+	}
+	
+	
+	
 	/**
 	 * Method to get the parameters of another category
 	 *
@@ -440,7 +569,7 @@ class FlexicontentModelCategory extends JModelAdmin
 				. ' WHERE id = ' . (int)$id
 				;
 		$this->_db->setQuery( $query );
-		if (!$this->_db->query()) {
+		if (!$this->_db->execute()) {
 			return false;
 		}
 		return true;
@@ -456,7 +585,8 @@ class FlexicontentModelCategory extends JModelAdmin
 	 * @return	JTable	A database object
 	 * @since	1.6
 	*/
-	public function getTable($type = 'flexicontent_categories', $prefix = '', $config = array()) {
+	public function getTable($type = 'flexicontent_categories', $prefix = '', $config = array())
+	{
 		return JTable::getInstance($type, $prefix, $config);
 	}
 	
@@ -475,7 +605,7 @@ class FlexicontentModelCategory extends JModelAdmin
 		$extension	= $this->getState('com_flexicontent.category.extension');
 
 		// Get the form.
-		$form = $this->loadForm('com_flexicontent.category'.$extension, 'category', array('control' => 'jform', 'load_data' => $loadData));
+		$form = $this->loadForm('com_flexicontent.'.$this->getName(), $this->getName(), array('control' => 'jform', 'load_data' => $loadData));
 		if (empty($form)) {
 			return false;
 		}
@@ -498,6 +628,8 @@ class FlexicontentModelCategory extends JModelAdmin
 
 		return $form;
 	}
+	
+	
 	/**
 	 * Method to get the data that should be injected in the form.
 	 *
@@ -507,14 +639,120 @@ class FlexicontentModelCategory extends JModelAdmin
 	protected function loadFormData()
 	{
 		// Check the session for previously entered form data.
-		$data = JFactory::getApplication()->getUserState('com_flexicontent.edit.'.$this->getName().'.data', array());
+		$app = JFactory::getApplication();
+		$data = $app->getUserState('com_flexicontent.edit.'.$this->getName().'.data', array());
 
 		if (empty($data)) {
 			$data = $this->getItem();
 		}
 
+		$this->preprocessData('com_flexicontent.'.$this->getName(), $data);
+		//$this->preprocessData('com_categories.'.$this->getName(), $data);
+		
 		return $data;
 	}
+	
+	
+	/**
+	 * Method to preprocess the form.
+	 *
+	 * @param   JForm   $form   A JForm object.
+	 * @param   mixed   $data   The data expected for the form.
+	 * @param   string  $group  The name of the plugin group to import.
+	 *
+	 * @return  void
+	 *
+	 * @see     JFormField
+	 * @since   1.6
+	 * @throws  Exception if there is an error in the form event.
+	 */
+	protected function preprocessForm(JForm $form, $data, $group = 'content')
+	{
+		jimport('joomla.filesystem.path');
+
+		$lang = JFactory::getLanguage();
+		$component = $this->getState('com_flexicontent.category.component');
+		$section = $this->getState('com_flexicontent.category.section');
+		$extension = JFactory::getApplication()->input->get('extension', null);
+
+		// Get the component form if it exists
+		$name = 'category' . ($section ? ('.' . $section) : '');
+
+		// Try to find the component helper.
+		$eName = str_replace('com_', '', $component);
+		$path = JPath::clean(JPATH_ADMINISTRATOR . "/components/$component/helpers/category.php");
+
+		if (file_exists($path))
+		{
+			require_once $path;
+			$cName = ucfirst($eName) . ucfirst($section) . 'HelperCategory';
+
+			if (class_exists($cName) && is_callable(array($cName, 'onPrepareForm')))
+			{
+				$lang->load($component, JPATH_BASE, null, false, false)
+					|| $lang->load($component, JPATH_BASE . '/components/' . $component, null, false, false)
+					|| $lang->load($component, JPATH_BASE, $lang->getDefault(), false, false)
+					|| $lang->load($component, JPATH_BASE . '/components/' . $component, $lang->getDefault(), false, false);
+				call_user_func_array(array($cName, 'onPrepareForm'), array(&$form));
+
+				// Check for an error.
+				if ($form instanceof Exception)
+				{
+					$this->setError($form->getMessage());
+
+					return false;
+				}
+			}
+		}
+
+		// Set the access control rules field component value.
+		$form->setFieldAttribute('rules', 'component', $component);
+		$form->setFieldAttribute('rules', 'section', $name);
+
+		// Association category items
+		$useAssocs = $this->useAssociations();
+
+		if ($useAssocs)
+		{
+			$languages = JLanguageHelper::getLanguages('lang_code');
+			$addform = new SimpleXMLElement('<form />');
+			$fields = $addform->addChild('fields');
+			$fields->addAttribute('name', 'associations');
+			$fieldset = $fields->addChild('fieldset');
+			$fieldset->addAttribute('name', 'item_associations');
+			$fieldset->addAttribute('description', 'COM_CATEGORIES_ITEM_ASSOCIATIONS_FIELDSET_DESC');
+			$add = false;
+
+			foreach ($languages as $tag => $language)
+			{
+				if (empty($data->language) || $tag != $data->language)
+				{
+					$add = true;
+					$field = $fieldset->addChild('field');
+					$field->addAttribute('name', $tag);
+					$field->addAttribute('type', 'qfcategory');
+					$field->addAttribute('language', $tag);
+					$field->addAttribute('label', $language->title);
+					$field->addAttribute('class', 'label');
+					$field->addAttribute('translate_label', 'true');
+					$field->addAttribute('extension', $extension);
+					$field->addAttribute('edit', 'true');
+					$field->addAttribute('clear', 'true');
+					$field->addAttribute('filter', 'INT');  // also enforced later, but better to have it here too
+				}
+			}
+
+			if ($add)
+			{
+				$form->load($addform, false);
+			}
+		}
+
+		// Trigger the default form events.
+		parent::preprocessForm($form, $data, $group);
+	}
+	
+	
 	
 	/**
 	 * Method to get a category.
@@ -525,47 +763,66 @@ class FlexicontentModelCategory extends JModelAdmin
 	 */
 	public function getItem($pk = null)
 	{
-		$pk = $pk ? $pk : $this->_id;
+		$pk = $pk ? (int) $pk : $this->_id;
+		$pk = $pk ? $pk : (int) $this->getState($this->getName().'.id');
 		
-		if ( $result = parent::getItem($pk) )
+		static $items = array();
+		if ( $pk && isset($items[$pk]) ) return $items[$pk];
+		
+		if ( $item = parent::getItem($pk) )
 		{
 			// Prime required properties.
-			if (empty($result->id)) {
-				$result->parent_id	= $this->getState('com_flexicontent.category.parent_id');
-				$result->extension	= $this->getState('com_flexicontent.category.extension');
+			if (empty($item->id)) {
+				$item->parent_id	= $this->getState('com_flexicontent.category.parent_id');
+				$item->extension	= $this->getState('com_flexicontent.category.extension');
 			}
 
 			// Convert the metadata field to an array.
-			$registry = new JRegistry($result->metadata);
-			$result->metadata = $registry->toArray();
+			$registry = new JRegistry($item->metadata);
+			$item->metadata = $registry->toArray();
 
 			// Convert the created and modified dates to local user time for display in the form.
 			jimport('joomla.utilities.date');
 			
 			$site_zone = JFactory::getApplication()->getCfg('offset');
 			$user_zone = JFactory::getUser()->getParam('timezone', $site_zone);
-			$tz_string = FLEXI_J16GE ? $user_zone : $site_zone ;
+			$tz_string = $user_zone;
 			$tz = new DateTimeZone( $tz_string );
 			
-			if (intval($result->created_time)) {
-				$date = new JDate($result->created_time);
+			if (intval($item->created_time)) {
+				$date = new JDate($item->created_time);
 				$date->setTimezone($tz);
-				$result->created_time = FLEXI_J16GE ? $date->toSql(true) : $date->toMySQL(true);
+				$item->created_time = $date->toSql(true);
 			} else {
-				$result->created_time = null;
+				$item->created_time = null;
 			}
 
-			if (intval($result->modified_time)) {
-				$date = new JDate($result->modified_time);
+			if (intval($item->modified_time)) {
+				$date = new JDate($item->modified_time);
 				$date->setTimezone($tz);
-				$result->modified_time = FLEXI_J16GE ? $date->toSql(true) : $date->toMySQL(true);
+				$item->modified_time = $date->toSql(true);
 			} else {
-				$result->modified_time = null;
+				$item->modified_time = null;
 			}
-			$this->_category = $result;
+			$this->_category = $item;
+
+			$useAssocs = $this->useAssociations();
+			if ($useAssocs)
+			{
+				if ($item->id != null)
+				{
+					$item->associations = CategoriesHelper::getAssociations($item->id, $item->extension);
+					JArrayHelper::toInteger($item->associations);
+				}
+				else
+				{
+					$item->associations = array();
+				}
+			}
 		}
-
-		return $result;
+		
+		if ($pk) $items[$pk] = $item;
+		return $item;
 	}
 	
 	
@@ -584,19 +841,33 @@ class FlexicontentModelCategory extends JModelAdmin
 		}
 		$this->setState('com_flexicontent.category.parent_id', $parentId);
 
+		// Get id from user state
+		$pk = $this->_id;
+		if ( !$pk ) {
+			$cid = $app->getUserState('com_flexicontent.edit.'.$this->getName().'.id');
+			if ( empty($cid) ) $pk = 0;
+			else {
+				JArrayHelper::toInteger($cid, array(0));
+				$pk = $cid[0];
+			}
+		}
+		if ( !$pk ) {
+			$cid = JRequest::getVar( 'cid', array(0), $hash='default', 'array' );
+			JArrayHelper::toInteger($cid, array(0));
+			$pk = $cid[0];
+		}
+		$this->setState($this->getName().'.id', $pk);
+		
 		if (!($extension = $app->getUserState('com_flexicontent.edit.'.$this->getName().'.extension'))) {
 			$extension = JRequest::getCmd('extension', FLEXI_CAT_EXTENSION);
 		}
-		// Load the User state.
-		if (!($pk = (int) $app->getUserState('com_flexicontent.edit.'.$this->getName().'.id'))) {
-			$cid = JRequest::getVar('cid', array(0));
-			$pk = (int)$cid[0];
-		}
-
+		
 		$this->setState('com_flexicontent.category.extension', $extension);
 		$parts = explode('.',$extension);
+		
 		// extract the component name
 		$this->setState('com_flexicontent.category.component', $parts[0]);
+		
 		// extract the optional section name
 		$this->setState('com_flexicontent.category.section', (count($parts)>1)?$parts[1]:null);
 
@@ -612,6 +883,31 @@ class FlexicontentModelCategory extends JModelAdmin
 			return $this->_category->params;
 		}
 		return array();
+	}
+	
+	
+	/**
+	 * Method to get parameters of parent categories
+	 *
+	 * @access public
+	 * @return	string
+	 * @since	1.6
+	 */
+	function getParentParams($cid) {
+		if (empty($cid)) return array();
+		
+		global $globalcats;
+		$db = JFactory::getDBO();
+		
+		// Select the required fields from the table.
+		$query = " SELECT id, params"
+			." FROM #__categories"
+			." WHERE id IN (".$globalcats[$cid]->ancestors.") "
+			." ORDER BY level ASC";
+		
+		$db->setQuery( $query );
+		$data = $db->loadObjectList('id');
+		return $data;
 	}
 	
 	
@@ -632,12 +928,35 @@ class FlexicontentModelCategory extends JModelAdmin
 		$table = $this->getTable();
 		while ($table->load(array('alias' => $alias, 'parent_id' => $parent_id)))
 		{
-			$title = JString::increment($title);
-			$alias = JString::increment($alias, 'dash');
+			$title = StringHelper::increment($title);
+			$alias = StringHelper::increment($alias, 'dash');
 		}
 
 		return array($title, $alias);
 	}
 	
+	
+	/**
+	 * Method to save language associations
+	 *
+	 * @return  boolean True if successful
+	 */
+	function saveAssociations(&$item, &$data)
+	{
+		$item = $item ? $item: $this->_category;
+		$context = 'com_categories';
+		
+		return flexicontent_db::saveAssociations($item, $data, $context);
+	}
+	
+	
+	/**
+	 * Method to determine if J3.1+ associations should be used
+	 *
+	 * @return  boolean True if using J3 associations; false otherwise.
+	 */
+	public function useAssociations()
+	{
+		return flexicontent_db::useAssociations();
+	}
 }
-?>

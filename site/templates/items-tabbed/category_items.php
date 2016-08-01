@@ -17,12 +17,18 @@
  */
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
+
+use Joomla\String\StringHelper;
+
 // first define the template name
 $tmpl = $this->tmpl;
 $user = JFactory::getUser();
 
 JFactory::getDocument()->addScript( JURI::base(true).'/components/com_flexicontent/assets/js/tabber-minimized.js');
 JFactory::getDocument()->addStyleSheet(JURI::base(true).'/components/com_flexicontent/assets/css/tabber.css');
+
+// MICRODATA 'itemtype' for ALL items in the listing (this is the fallback if the 'itemtype' in content type / item configuration are not set)
+$microdata_itemtype_cat = $this->params->get( 'microdata_itemtype_cat', 'Article' );
 ?>
 
 <?php
@@ -38,6 +44,7 @@ JFactory::getDocument()->addStyleSheet(JURI::base(true).'/components/com_flexico
 		echo '<div class="group">'."\n".$filter_form_html."\n".'</div>';
 	}
 ?>
+
 <div class="fcclear"></div>
 
 <?php
@@ -51,6 +58,9 @@ if (!$this->items) {
 }
 
 $items = & $this->items;
+
+$tooltip_class = FLEXI_J30GE ? 'hasTooltip' : 'hasTip';
+$_comments_container_params = 'class="fc_comments_count '.$tooltip_class.'" title="'.flexicontent_html::getToolTip('FLEXI_NUM_OF_COMMENTS', 'FLEXI_NUM_OF_COMMENTS_TIP', 1, 1).'"';
 
 
 // ***********
@@ -85,11 +95,16 @@ foreach ($items as $i => $item) :
 		}
 	}
 	$markup_tags .= '</span>';
+	
+	// MICRODATA document type (itemtype) for each item
+	// -- NOTE: category's microdata itemtype is fallback if the microdata itemtype of the CONTENT TYPE / ITEM are not set
+	$microdata_itemtype = $item->params->get( 'microdata_itemtype') ? $item->params->get( 'microdata_itemtype') : $microdata_itemtype_cat;
+	$microdata_itemtype_code = $microdata_itemtype ? 'itemscope itemtype="http://schema.org/'.$microdata_itemtype.'"' : '';
 ?>
 
 <!-- tab start -->
-<?php echo '<'.$mainAreaTag; ?> id="tablist_item_<?php echo $i; ?>" class="<?php echo $fc_item_classes; ?> group">
-	<h3 class="tabberheading"><?php echo mb_substr ($item->title, 0, 20, 'utf-8'); ?></h3><!-- tab title -->
+<?php echo '<'.$mainAreaTag; ?> id="tablist_item_<?php echo $i; ?>" class="<?php echo $fc_item_classes; ?> group" <?php echo $microdata_itemtype_code; ?>>
+	<h3 class="tabberheading"><?php echo StringHelper::substr($item->title, 0, 20); ?></h3><!-- tab title -->
 	
 	
   <?php if ($item->event->beforeDisplayContent) : ?>
@@ -101,28 +116,28 @@ foreach ($items as $i => $item) :
 	<?php endif; ?>
 	
 	<?php
-	$show_editbutton = $this->params->get('show_editbutton', 1);
 	$pdfbutton = flexicontent_html::pdfbutton( $item, $this->params );
 	$mailbutton = flexicontent_html::mailbutton( FLEXI_ITEMVIEW, $this->params, $item->categoryslug, $item->slug, 0, $item );
 	$printbutton = flexicontent_html::printbutton( $this->print_link, $this->params );
-	$editbutton = $show_editbutton ? flexicontent_html::editbutton( $item, $this->params ) : '';
-	$statebutton = $show_editbutton ? flexicontent_html::statebutton( $item, $this->params ) : '';
+	$editbutton = flexicontent_html::editbutton( $item, $this->params );
+	$statebutton = flexicontent_html::statebutton( $item, $this->params );
+	$deletebutton = flexicontent_html::deletebutton( $item, $this->params );
 	$approvalbutton = flexicontent_html::approvalbutton( $item, $this->params );
 	?>
 	
-	<?php if ($pdfbutton || $mailbutton || $printbutton || $editbutton || $statebutton || $approvalbutton) : ?>
+	<?php if ($pdfbutton || $mailbutton || $printbutton || $editbutton || $statebutton || $deletebutton || $approvalbutton) : ?>
 		<!-- BOF buttons -->
-		<p class="buttons">
+		<div class="buttons">
 			<?php echo $pdfbutton; ?>
 			<?php echo $mailbutton; ?>
 			<?php echo $printbutton; ?>
 			<?php echo $editbutton; ?>
 			<?php echo $statebutton; ?>
+			<?php echo $deletebutton; ?>
 			<?php echo $approvalbutton; ?>
-		</p>
+		</div>
 		<!-- EOF buttons -->
 	<?php endif; ?>
-	
 	
 	
 	<?php
@@ -135,7 +150,7 @@ foreach ($items as $i => $item) :
 	
 	<?php if ($this->params->get('show_comments_count')) : ?>
 		<?php if ( isset($this->comments[ $item->id ]->total) ) : ?>
-			<div class="fc_comments_count hasTip" alt="<?php echo JText::_('FLEXI_NUM_OF_COMMENTS');?>" title="<?php echo JText::_('FLEXI_NUM_OF_COMMENTS');?>::<?php echo JText::_('FLEXI_NUM_OF_COMMENTS_TIP');?>">
+			<div <?php echo $_comments_container_params; ?> >
 				<?php echo $this->comments[ $item->id ]->total; ?>
 			</div>
 		<?php endif; ?>
@@ -144,12 +159,14 @@ foreach ($items as $i => $item) :
 	
 	<?php if ($this->params->get('show_title', 1)) : ?>
 		<!-- BOF item title -->
-		<?php echo '<h'.$itemTitleHeaderLevel; ?> class="contentheading"><span class="fc_item_title">
+		<?php echo '<h'.$itemTitleHeaderLevel; ?> class="contentheading">
+			<span class="fc_item_title" itemprop="name">
 			<?php
-				echo ( mb_strlen($item->title, 'utf-8') > $this->params->get('title_cut_text',200) ) ?
-					mb_substr ($item->title, 0, $this->params->get('title_cut_text',200), 'utf-8') . ' ...'  :  $item->title;
+				echo ( StringHelper::strlen($item->title) > $this->params->get('title_cut_text',200) ) ?
+					StringHelper::substr($item->title, 0, $this->params->get('title_cut_text',200)) . ' ...'  :  $item->title;
 			?>
-		</span><?php echo '</h'.$itemTitleHeaderLevel; ?>>
+			</span>
+		<?php echo '</h'.$itemTitleHeaderLevel; ?>>
 		<!-- EOF item title -->
 	<?php endif; ?>
 	
@@ -168,7 +185,7 @@ foreach ($items as $i => $item) :
 		<!-- BOF subtitle1 block -->
 		<div class="flexi lineinfo subtitle1 group">
 			<?php foreach ($item->positions['subtitle1'] as $field) : ?>
-			<div class="flexi element">
+			<div class="flexi element field_<?php echo $field->name; ?>">
 				<?php if ($field->label) : ?>
 				<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 				<?php endif; ?>
@@ -184,7 +201,7 @@ foreach ($items as $i => $item) :
 		<!-- BOF subtitle2 block -->
 		<div class="flexi lineinfo subtitle2 group">
 			<?php foreach ($item->positions['subtitle2'] as $field) : ?>
-			<div class="flexi element">
+			<div class="flexi element field_<?php echo $field->name; ?>">
 				<?php if ($field->label) : ?>
 				<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 				<?php endif; ?>
@@ -200,7 +217,7 @@ foreach ($items as $i => $item) :
 		<!-- BOF subtitle3 block -->
 		<div class="flexi lineinfo subtitle3 group">
 			<?php foreach ($item->positions['subtitle3'] as $field) : ?>
-			<div class="flexi element">
+			<div class="flexi element field_<?php echo $field->name; ?>">
 				<?php if ($field->label) : ?>
 				<span class="flexi label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></span>
 				<?php endif; ?>
@@ -273,9 +290,9 @@ foreach ($items as $i => $item) :
 		<div class="description group">
 			<?php foreach ($item->positions['description'] as $field) : ?>
 				<?php if ($field->label) : ?>
-			<div class="desc-title"><?php echo $field->label; ?></div>
+			<div class="desc-title label field_<?php echo $field->name; ?>"><?php echo $field->label; ?></div>
 				<?php endif; ?>
-			<div class="desc-content"><?php echo $field->display; ?></div>
+			<div class="desc-content field_<?php echo $field->name; ?>"><?php echo $field->display; ?></div>
 			<?php endforeach; ?>
 		</div>
 		<!-- EOF description -->
@@ -286,9 +303,10 @@ foreach ($items as $i => $item) :
 	
 	
 	<?php
+		$readmore_forced = $this->params->get('show_readmore', 1) == -1;
 		$readmore_shown  = $this->params->get('show_readmore', 1) && strlen(trim($item->fulltext)) >= 1;
-		$footer_shown = $readmore_shown ||
-			isset($item->positions['bottom']) || $item->event->afterDisplayContent;
+		$readmore_shown  = $readmore_shown || $readmore_forced;
+		$footer_shown = $readmore_shown || isset($item->positions['bottom']) || $item->event->afterDisplayContent;
 	?>
 	
 	
@@ -317,10 +335,13 @@ foreach ($items as $i => $item) :
 	
 	
 	<?php if ( $readmore_shown ) : ?>
-	<span class="readmore group">
-		<a href="<?php echo JRoute::_(FlexicontentHelperRoute::getItemRoute($item->slug, $item->categoryslug, 0, $item)); ?>" class="readon">
-			<?php echo ' ' . ($item->params->get('readmore')  ?  $item->params->get('readmore') : JText::sprintf('FLEXI_READ_MORE', $item->title)); ?>
+	<span class="readmore">
+		
+		<a href="<?php echo JRoute::_(FlexicontentHelperRoute::getItemRoute($item->slug, $item->categoryslug, 0, $item)); ?>" class="btn" itemprop="url">
+			<span class="icon-chevron-right"></span>
+			<?php echo $item->params->get('readmore')  ?  $item->params->get('readmore') : JText::sprintf('FLEXI_READ_MORE', $item->title); ?>
 		</a>
+		
 	</span>
 	<?php endif; ?>
 	

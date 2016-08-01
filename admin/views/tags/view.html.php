@@ -18,10 +18,11 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
+use Joomla\String\StringHelper;
 
 /**
- * View class for the FLEXIcontent categories screen
+ * View class for the FLEXIcontent tags screen
  *
  * @package Joomla
  * @subpackage FLEXIcontent
@@ -29,41 +30,82 @@ jimport('joomla.application.component.view');
  */
 class FlexicontentViewTags extends JViewLegacy
 {
-	function display($tpl = null)
+	function display( $tpl = null )
 	{
 		//initialise variables
 		$app      = JFactory::getApplication();
-		$option   = JRequest::getVar('option');
+		$cparams  = JComponentHelper::getParams( 'com_flexicontent' );
 		$user     = JFactory::getUser();
 		$db       = JFactory::getDBO();
 		$document = JFactory::getDocument();
+		$option   = JRequest::getCmd('option');
+		$view     = JRequest::getVar('view');
 		
-		$cparams  = JComponentHelper::getParams( 'com_flexicontent' );
+		// Get model
+		$model = $this->getModel();
+		
 		$print_logging_info = $cparams->get('print_logging_info');
 		if ( $print_logging_info )  global $fc_run_times;
 		
-		JHTML::_('behavior.tooltip');
-
-		//get vars
-		$filter_order     = $app->getUserStateFromRequest( $option.'.tags.filter_order', 		'filter_order', 	't.name', 'cmd' );
-		$filter_order_Dir = $app->getUserStateFromRequest( $option.'.tags.filter_order_Dir',	'filter_order_Dir',	'', 'word' );
-		$filter_state     = $app->getUserStateFromRequest( $option.'.tags.filter_state', 		'filter_state', 	'*', 'word' );
-		$filter_assigned = $app->getUserStateFromRequest( $option.'.tags.filter_assigned', 	'filter_assigned', '*', 'word' );
-		$search 			= $app->getUserStateFromRequest( $option.'.tags.search', 				'search', 			'', 'string' );
-		$search 			= FLEXI_J16GE ? $db->escape( trim(JString::strtolower( $search ) ) ) : $db->getEscaped( trim(JString::strtolower( $search ) ) );
-
-		//add css and submenu to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
-
-		// Get User's Global Permissions
+		
+		
+		// ***********
+		// Get filters
+		// ***********
+		
+		$count_filters = 0;
+		
+		// Order and order direction
+		$filter_order      = $model->getState('filter_order');
+		$filter_order_Dir  = $model->getState('filter_order_Dir');
+		
+		// Get filter vars
+		$filter_state    = $model->getState('filter_state');
+		$filter_assigned = $model->getState('filter_assigned');
+		if ($filter_state) $count_filters++; if ($filter_assigned) $count_filters++;
+		
+		// Text search
+		$search = $model->getState( 'search' );
+		$search = $db->escape( StringHelper::trim(StringHelper::strtolower( $search ) ) );
+		
+		
+		
+		// ****************************
+		// Important usability messages
+		// ****************************
+		
+		if ( $cparams->get('show_usability_messages', 1) )
+		{
+		}
+		
+		
+		
+		// **************************
+		// Add css and js to document
+		// **************************
+		
+		flexicontent_html::loadFramework('select2');
+		//JHTML::_('behavior.tooltip');
+		
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
+		
+		
+		// *****************************
+		// Get user's global permissions
+		// *****************************
+		
 		$perms = FlexicontentHelperPerm::getPerm();
-
+		
+		
+		
+		// ************************
+		// Create Submenu & Toolbar
+		// ************************
+		
 		// Create Submenu (and also check access to current view)
 		FLEXISubmenu('CanTags');
-		
 		
 		// Create document/toolbar titles
 		$doc_title = JText::_( 'FLEXI_TAGS' );
@@ -72,7 +114,7 @@ class FlexicontentViewTags extends JViewLegacy
 		$document->setTitle($doc_title .' - '. $site_title);
 		
 		// Create the toolbar
-		$js = "window.addEvent('domready', function(){";
+		$js = "jQuery(document).ready(function(){";
 		
 		$contrl = FLEXI_J16GE ? "tags." : "";
 		$toolbar = JToolBar::getInstance('toolbar');
@@ -96,7 +138,9 @@ class FlexicontentViewTags extends JViewLegacy
 		
 		JToolBarHelper::publishList($contrl.'publish');
 		JToolBarHelper::unpublishList($contrl.'unpublish');
-		JToolBarHelper::addNew($contrl.'add');
+		if ($perms->CanCreateTags) {
+			JToolBarHelper::addNew($contrl.'add');
+		}
 		JToolBarHelper::editList($contrl.'edit');
 		
 		//JToolBarHelper::deleteList(JText::_('FLEXI_ARE_YOU_SURE'), $contrl.'remove');
@@ -108,6 +152,9 @@ class FlexicontentViewTags extends JViewLegacy
 		flexicontent_html::addToolBarButton(
 			'FLEXI_DELETE', 'delete', '', $msg_alert, $msg_confirm,
 			$btn_task, $extra_js, $btn_list=true, $btn_menu=true, $btn_confirm=true);
+		
+		// Checkin
+		JToolbarHelper::checkin($contrl.'checkin');
 		
 		if ($perms->CanConfig) {
 			JToolBarHelper::divider(); JToolBarHelper::spacer();
@@ -123,50 +170,72 @@ class FlexicontentViewTags extends JViewLegacy
 		$document->addScriptDeclaration($js);
 		
 		
-		//Get data from the model
+		// Get data from the model
 		if ( $print_logging_info )  $start_microtime = microtime(true);
+		$model =  $this->getModel();
 		$rows = $this->get( 'Data');
 		if ( $print_logging_info ) @$fc_run_times['execute_main_query'] += round(1000000 * 10 * (microtime(true) - $start_microtime)) / 10;
-
-		// Get assigned items
-		$model =  $this->getModel();
-		$rowids = array();
-		foreach ($rows as $row) $rowids[] = $row->id;
-		if ( $print_logging_info )  $start_microtime = microtime(true);
-		$rowtotals = $model->getAssignedItems($rowids);
-		if ( $print_logging_info ) @$fc_run_times['execute_sec_queries'] += round(1000000 * 10 * (microtime(true) - $start_microtime)) / 10;
-		foreach ($rows as $row) {
-			$row->nrassigned = isset($rowtotals[$row->id]) ? $rowtotals[$row->id]->nrassigned : 0;
+		
+		
+		// Get assigned items (via separate query),  (if not already retrieved)
+		// ... when we order by assigned then this is already done via main DB query
+		if ( $filter_order!='nrassigned' )
+		{
+			$rowids = array();
+			foreach ($rows as $row) $rowids[] = $row->id;
+			if ( $print_logging_info )  $start_microtime = microtime(true);
+			$rowtotals = $model->getAssignedItems($rowids);
+			if ( $print_logging_info ) @$fc_run_times['execute_sec_queries'] += round(1000000 * 10 * (microtime(true) - $start_microtime)) / 10;
+			foreach ($rows as $row) {
+				$row->nrassigned = isset($rowtotals[$row->id]) ? $rowtotals[$row->id]->nrassigned : 0;
+			}
 		}
 		
+		// Create pagination object
 		$pagination = $this->get( 'Pagination' );
 
 		$lists = array();
 		
-		//build arphaned/assigned filter
+		// build orphaned/assigned filter
 		$assigned 	= array();
-		$assigned[] = JHTML::_('select.option',  '', '- '. JText::_( 'FLEXI_ALL_TAGS' ) .' -' );
+		$assigned[] = JHTML::_('select.option',  '', '-'/*JText::_('FLEXI_ALL_TAGS')*/);
 		$assigned[] = JHTML::_('select.option',  'O', JText::_( 'FLEXI_ORPHANED' ) );
 		$assigned[] = JHTML::_('select.option',  'A', JText::_( 'FLEXI_ASSIGNED' ) );
 
-		$lists['assigned'] = JHTML::_('select.genericlist', $assigned, 'filter_assigned', 'class="inputbox" size="1" onchange="submitform( );"', 'value', 'text', $filter_assigned );
+		$lists['assigned'] = ($filter_assigned || 1 ? '<label class="label">'.JText::_('FLEXI_ASSIGNED').'</label>' : '').
+			JHTML::_('select.genericlist', $assigned, 'filter_assigned', 'class="use_select2_lib" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', 'value', 'text', $filter_assigned );
 		
-		//publish unpublished filter
-		$lists['state']	= JHTML::_('grid.state', $filter_state );
+		// build publication state filter
+		$states 	= array();
+		$states[] = JHTML::_('select.option',  '', '-'/*JText::_( 'FLEXI_SELECT_STATE' )*/ );
+		$states[] = JHTML::_('select.option',  'P', JText::_( 'FLEXI_PUBLISHED' ) );
+		$states[] = JHTML::_('select.option',  'U', JText::_( 'FLEXI_UNPUBLISHED' ) );
+		//$states[] = JHTML::_('select.option',  '-2', JText::_( 'FLEXI_TRASHED' ) );
 		
-		// search filter
+		$lists['state'] = ($filter_state || 1 ? '<label class="label">'.JText::_('FLEXI_STATE').'</label>' : '').
+			JHTML::_('select.genericlist', $states, 'filter_state', 'class="use_select2_lib" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', 'value', 'text', $filter_state );
+			//JHTML::_('grid.state', $filter_state );
+		
+		
+		// text search filter
 		$lists['search']= $search;
-
+		
+		
 		// table ordering
 		$lists['order_Dir'] = $filter_order_Dir;
 		$lists['order'] = $filter_order;
-
+		
+		
 		//assign data to template
-		$this->assignRef('lists'      , $lists);
-		$this->assignRef('rows'      	, $rows);
+		$this->assignRef('count_filters', $count_filters);
+		$this->assignRef('lists'	, $lists);
+		$this->assignRef('rows'		, $rows);
 		$this->assignRef('pagination'	, $pagination);
-
+		
+		$this->assignRef('option', $option);
+		$this->assignRef('view', $view);
+		
+		$this->sidebar = FLEXI_J30GE ? JHtmlSidebar::render() : null;
 		parent::display($tpl);
 	}
 }
-?>

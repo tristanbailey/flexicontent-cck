@@ -17,41 +17,52 @@
  */
 
 defined('_JEXEC') or die('Restricted access');
+
+use Joomla\String\StringHelper;
+
+$tip_class = FLEXI_J30GE ? ' hasTooltip' : ' hasTip';
+$btn_class = FLEXI_J30GE ? 'btn' : 'fc_button fcsimple';
+
 $ctrl = FLEXI_J16GE ? 'archive.' : '';
 $items_task = FLEXI_J16GE ? 'task=items.' : 'controller=items&amp;task=';
 $categories_task = FLEXI_J16GE ? 'task=categories.' : 'controller=categories&amp;task=';
 ?>
-<div class="qickfaq">
-<form action="index.php" method="post" name="adminForm" id="adminForm">
 
-	<table class="adminform">
-		<tr>
-			<td width="100%">
-				<?php echo JText::_( 'FLEXI_SEARCH' ); ?>
-				<input type="text" name="search" id="search" value="<?php echo $this->lists['search']; ?>" class="text_area" onChange="document.adminForm.submit();" />
-				<div id="fc-filter-buttons">
-					<button class="fc_button fcsimple" onclick="this.form.submit();"><?php echo JText::_( 'FLEXI_GO' ); ?></button>
-					<button class="fc_button fcsimple" onclick="this.form.getElementById('search').value='';this.form.submit();"><?php echo JText::_( 'FLEXI_RESET' ); ?></button>
-				</div>
-			</td>
-		</tr>
-	</table>
+<div class="flexicontent">
+<form action="index.php" method="post" name="adminForm" id="adminForm" class="form-validate">
 
-	<table class="adminlist" cellspacing="1">
+<?php if (!empty( $this->sidebar)) : ?>
+	<div id="j-sidebar-container" class="span2">
+		<?php echo str_replace('type="button"', '', $this->sidebar); ?>
+	</div>
+	<div id="j-main-container" class="span10">
+<?php else : ?>
+	<div id="j-main-container">
+<?php endif;?>
+
+	<div id="fc-filters-header">
+		<span class="btn-group input-append fc-filter filter-search filter-search">
+			<input type="text" name="search" id="search" placeholder="<?php echo JText::_( 'FLEXI_SEARCH' ); ?>" value="<?php echo htmlspecialchars($this->lists['search'], ENT_QUOTES, 'UTF-8'); ?>" class="inputbox" />
+			<button title="" data-original-title="<?php echo JText::_('FLEXI_SEARCH'); ?>" class="<?php echo $btn_class.' '.$tip_class; ?>" onclick="document.adminForm.limitstart.value=0; Joomla.submitform();"><?php echo FLEXI_J30GE ? '<i class="icon-search"></i>' : JText::_('FLEXI_GO'); ?></button>
+			<button title="" data-original-title="<?php echo JText::_('FLEXI_RESET_FILTERS'); ?>" class="<?php echo $btn_class.' '.$tip_class; ?>" onclick="document.adminForm.limitstart.value=0; delAllFilters(); Joomla.submitform();"><?php echo FLEXI_J30GE ? '<i class="icon-remove"></i>' : JText::_('FLEXI_CLEAR'); ?></button>
+		</span>
+	</div>		
+
+	<table id="adminListTableFCarchive" class="adminlist fcmanlist">
 	<thead>
 		<tr>
-			<th width="5"><?php echo JText::_( 'FLEXI_NUM' ); ?></th>
-			<th width="5"><input type="checkbox" name="toggle" value="" onClick="<?php echo FLEXI_J30GE ? 'Joomla.checkAll(this);' : 'checkAll('.count( $this->rows).');'; ?>" /></th>
+			<th><?php echo JText::_( 'FLEXI_NUM' ); ?></th>
+			<th><input type="checkbox" name="toggle" value="" onClick="<?php echo FLEXI_J30GE ? 'Joomla.checkAll(this);' : 'checkAll('.count( $this->rows).');'; ?>" /></th>
 			<th class="title"><?php echo JHTML::_('grid.sort', 'FLEXI_TITLE', 'i.title', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
-			<th width="20%"><?php echo JHTML::_('grid.sort', 'FLEXI_ALIAS', 'i.alias', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
-			<th width="20%"><?php echo JText::_( 'FLEXI_CATEGORIES' ); ?></th>
-			<th width="1%" nowrap="nowrap"><?php echo JHTML::_('grid.sort', 'FLEXI_ID', 'i.id', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
+			<th><?php echo JHTML::_('grid.sort', 'FLEXI_ALIAS', 'i.alias', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
+			<th><?php echo JText::_( 'FLEXI_CATEGORIES' ); ?></th>
+			<th><?php echo JHTML::_('grid.sort', 'FLEXI_ID', 'i.id', $this->lists['order_Dir'], $this->lists['order'] ); ?></th>
 		</tr>
 	</thead>
 
 	<tfoot>
 		<tr>
-			<td colspan="10">
+			<td colspan="6">
 				<?php echo $this->pageNav->getListFooter(); ?>
 			</td>
 		</tr>
@@ -75,7 +86,7 @@ $categories_task = FLEXI_J16GE ? 'task=categories.' : 'controller=categories&amp
 					echo htmlspecialchars($row->title, ENT_QUOTES, 'UTF-8');
 				} else {
 				?>
-					<span class="editlinktip hasTip" title="<?php echo JText::_( 'FLEXI_EDIT_ITEM' );?>::<?php echo $row->title; ?>">
+					<span class="<?php echo $tip_class; ?>" title="<?php echo JHtml::tooltipText(JText::_( 'FLEXI_EDIT_ITEM' ), $row->title, 0, 1); ?>">
 					<a href="<?php echo $link; ?>">
 					<?php echo htmlspecialchars($row->title, ENT_QUOTES, 'UTF-8'); ?>
 					</a></span>
@@ -85,8 +96,8 @@ $categories_task = FLEXI_J16GE ? 'task=categories.' : 'controller=categories&amp
 			</td>
 			<td>
 				<?php
-				if (JString::strlen($row->alias) > 25) {
-					echo JString::substr( htmlspecialchars($row->alias, ENT_QUOTES, 'UTF-8'), 0 , 25).'...';
+				if (StringHelper::strlen($row->alias) > 25) {
+					echo StringHelper::substr( htmlspecialchars($row->alias, ENT_QUOTES, 'UTF-8'), 0 , 25).'...';
 				} else {
 					echo htmlspecialchars($row->alias, ENT_QUOTES, 'UTF-8');
 				}
@@ -102,11 +113,11 @@ $categories_task = FLEXI_J16GE ? 'task=categories.' : 'controller=categories&amp
 					$catlink	= 'index.php?option=com_flexicontent&amp;'.$categories_task.'edit&amp;cid[]='. $category->id;
 					$title = htmlspecialchars($category->title, ENT_QUOTES, 'UTF-8');
 				?>
-					<span class="editlinktip hasTip" title="<?php echo JText::_( 'FLEXI_EDIT_CATEGORY' );?>::<?php echo $title; ?>">
+					<span class="<?php echo $tip_class; ?>" title="<?php echo JHtml::tooltipText( JText::_( 'FLEXI_EDIT_CATEGORY' ), $title, 0, 1); ?>">
 					<a href="<?php echo $catlink; ?>">
 						<?php 
-						if (JString::strlen($title) > 20) {
-							echo JString::substr( $title , 0 , 20).'...';
+						if (StringHelper::strlen($title) > 20) {
+							echo StringHelper::substr( $title , 0 , 20).'...';
 						} else {
 							echo $title;
 						}
@@ -130,8 +141,11 @@ $categories_task = FLEXI_J16GE ? 'task=categories.' : 'controller=categories&amp
 	<input type="hidden" name="controller" value="archive" />
 	<input type="hidden" name="view" value="archive" />
 	<input type="hidden" name="task" value="" />
-	<input type="hidden" name="filter_order" value="<?php echo $this->lists['order']; ?>" />
-	<input type="hidden" name="filter_order_Dir" value="<?php echo $this->lists['order_Dir']; ?>" />
+	<input type="hidden" id="filter_order" name="filter_order" value="<?php echo $this->lists['order']; ?>" />
+	<input type="hidden" id="filter_order_Dir" name="filter_order_Dir" value="<?php echo $this->lists['order_Dir']; ?>" />
 	<?php echo JHTML::_( 'form.token' ); ?>
+	
+	<!-- fc_perf -->
+	</div>  <!-- sidebar -->
 </form>
-</div>
+</div><!-- #flexicontent end -->

@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.controller');
+// Register autoloader for parent controller, in case controller is executed by another component
+JLoader::register('FlexicontentController', JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'controller.php');
 
 /**
  * FLEXIcontent Component Templates Controller
@@ -96,8 +97,8 @@ class FlexicontentControllerTemplates extends FlexicontentController
 
 	/**
 	 * Logic to render an XML file as form parameters
-	 * NOTE: this does not work with Request Data validation in J2.5+. The validation
-	 *       must be skipped or the parameters must be re-added after the validation
+	 * NOTE: Saving of these extra parameters requires extra handling as the are cleared during main form validation,
+	 *       These parameters must validated via an extra JForm object that represents their XML file and then re-added before DB saving step
 	 *
 	 * @access public
 	 * @return void
@@ -106,89 +107,353 @@ class FlexicontentControllerTemplates extends FlexicontentController
 	function getlayoutparams()
 	{
 		jimport('joomla.filesystem.file');
-		$mainframe = JFactory::getApplication();
+		$app  = JFactory::getApplication();
 		$user = JFactory::getUser();
 		
 		//get vars
-		$ext_view = JRequest::getVar( 'ext_view', '');
-		$ext_id   = JRequest::getInt ( 'ext_id', 0 );
-		$layout_name = JRequest::getVar( 'layout_name', 0 );
-		$directory   = JRequest::getVar( 'directory', 0 );
-		$path = (!is_dir($directory) ? JPATH_ROOT : '') . $directory;
+		$ext_option = JRequest::getVar( 'ext_option', '');  // Current component name
+		$ext_view   = JRequest::getVar( 'ext_view', '');    // Current view name
+		$ext_type   = JRequest::getVar( 'ext_type', '');    // Type layouts: 'templates' or empty: ('modules'/'fields')
+		$ext_name   = JRequest::getVar( 'ext_name', '');    // IN item/type/category (templates): template name
+		$ext_id     = JRequest::getInt ( 'ext_id', 0 );     // ID of item / type / category being edited
+		$layout_name = JRequest::getVar( 'layout_name', '' ); // IN modules/fields: layout name, IN item/type/category forms (FC templates):  'item' / 'category'
+		$directory   = JRequest::getVar( 'directory', '' );   // Explicit path of XML file:  $layout_name.xml
 		
 		$db = JFactory::getDBO();
-		if ($ext_view=='module') {
+		if ($ext_view=='item')
+		{
+			$query = 'SELECT attribs FROM #__content WHERE id = '.$ext_id;
+			// Load language file of the template
+			FLEXIUtilities::loadTemplateLanguageFile( $ext_name );
+			$path = JPATH::clean(JPATH_COMPONENT_SITE.DS.'templates'.DS.$directory);
+			$groupname = 'attribs';  // name="..." of <fields> container
+		}
+		
+		else if ($ext_view=='type')
+		{
+			$query = 'SELECT attribs FROM #__flexicontent_types WHERE id = '.$ext_id;
+			// Load language file of the template
+			FLEXIUtilities::loadTemplateLanguageFile( $ext_name );
+			$path = JPATH::clean(JPATH_COMPONENT_SITE.DS.'templates'.DS.$directory);
+			$groupname = 'attribs';  // name="..." of <fields> container
+		}
+		
+		else if ($ext_view=='category')
+		{
+			$query = 'SELECT params FROM #__categories WHERE id = '.$ext_id;
+			// Load language file of the template
+			FLEXIUtilities::loadTemplateLanguageFile( $ext_name );
+			$path = JPATH::clean(JPATH_COMPONENT_SITE.DS.'templates'.DS.$directory);
+			$groupname = 'attribs';  // name="..." of <fields> container
+		}
+		
+		else if ($ext_view=='user')
+		{
+			$query = 'SELECT author_catparams FROM #__flexicontent_authors_ext WHERE user_id = '.$ext_id;
+			// Load language file of the template
+			FLEXIUtilities::loadTemplateLanguageFile( $ext_name );
+			$path = JPATH::clean(JPATH_COMPONENT_SITE.DS.'templates'.DS.$directory);
+			$groupname = 'attribs';  // name="..." of <fields> container
+		}
+		
+		else if ($ext_view=='module')
+		{
 			$query = 'SELECT params FROM #__modules WHERE id = '.$ext_id;
-		} else if ($ext_view=='field') {
+			if ($ext_name)
+			{
+				JFactory::getLanguage()->load($ext_name, JPATH_SITE, 'en-GB', true);
+				JFactory::getLanguage()->load($ext_name, JPATH_SITE, null, true);
+			}
+			$path = is_dir($directory)  ?  $directory  :  JPATH_ROOT . $directory;
+			$groupname = 'params';  // name="..." of <fields> container
+		}
+		
+		else if ($ext_view=='field')
+		{
 			$query = 'SELECT attribs FROM #__flexicontent_fields WHERE id = '.$ext_id;
-		} else {
+			if ($ext_name)
+			{
+				JFactory::getLanguage()->load('plg_flexicontent_fields_'.$ext_name, JPATH_ADMINISTRATOR, 'en-GB', true);
+				JFactory::getLanguage()->load('plg_flexicontent_fields_'.$ext_name, JPATH_ADMINISTRATOR, null, true);
+			}
+			$path = is_dir($directory)  ?  $directory  :  JPATH_ROOT . $directory;
+			$groupname = 'params';  // name="..." of <fields> container
+		}
+		
+		else
+		{
 			echo "not supported extension/view: ".$ext_view;
 			return;
 		}
+		
+		if ( $ext_view=='module' && $ext_option!='com_modules' && $ext_option!='com_advancedmodules' )
+		{
+			echo '<div class="alert fcpadded fc-iblock" style="">You are editing module via extension: <span class="label label-warning">'.$ext_option.'</span><br/> - If extension does not call Joomla event <span class="label label-warning">onExtensionBeforeSave</span> then custom layout parameters may not be saved</div>';
+		}
+		
+		if ( !$app->isAdmin() )
+		{
+			JFactory::getLanguage()->load('com_flexicontent', JPATH_ADMINISTRATOR, 'en-GB', true);
+			JFactory::getLanguage()->load('com_flexicontent', JPATH_ADMINISTRATOR, null, true);
+		}
+		
 		$db->setQuery( $query );
 		$ext_params_str = $db->loadResult();
 		
-		$layoutpath = $path.DS.$layout_name.'.xml';
-		if (!file_exists($layoutpath)) {
-			echo !FLEXI_J16GE ? '<div style="font-size: 11px; color: gray; background-color: lightyellow; border: 1px solid lightgray; width: auto; padding: 4px 2%; margin: 1px 8px; height: auto;">' : '<p class="tip">';
-			echo ' Currently selected layout: <b>"'.$layout_name.'"</b> does not have layout specific parameters';
-			echo !FLEXI_J16GE ? '</div>' : '</p>';
-			exit;
+		$layout_names = explode(':', $layout_name);
+		if ( count($layout_names) > 1 ) {
+			$layout_name = $layout_names[1];
+			$layoutpath = JPATH::clean(JPATH_ROOT.DS.'templates'.DS.$layout_names[0].DS.'html'.DS.$ext_name.DS.$layout_name.'.xml');
 		}
 		
-		//Get data from the model
-		if (FLEXI_J16GE) {
-			$grpname = 'params'; // this name of <fields> container
-			
-			if (FLEXI_J30GE) {
-				$xml = simplexml_load_file($layoutpath);
-				$xmldoc = & $xml;
-			} else {
-				$xml = JFactory::getXMLParser('Simple');
-				$xml->loadFile($layoutpath);
-				$xmldoc = & $xml->document;
+		if ( empty($layoutpath) || !file_exists($layoutpath) )
+		{
+			$layoutpath = JPATH::clean($path.DS.$layout_name.'.xml');
+		}
+		
+		if ( !file_exists($layoutpath) ) {
+			if (file_exists($path.DS.'_fallback'.DS.'_fallback.xml')) {
+				$layoutpath = $path.DS.'_fallback'.DS.'_fallback.xml';
+				echo '<div class="alert alert-warning">Currently selected layout: <b>"'.$layout_name.'"</b> does not have a parameters XML file, using general defaults. if this is an old template then these parameters will allow to continue using it, but we recommend that you create parameter file: '.$layout_name.'.xml</div><div class="fcclear"></div>';
 			}
-			
-			$tmpl_params = FLEXI_J30GE ? $xmldoc->asXML() : $xmldoc->toString();
-			
-			// Create form object, (form name seems not to cause any problem)
-			$jform = new JForm('com_flexicontent.template.item', array('control' => 'jform', 'load_data' => true));
-			$jform->load($tmpl_params);
-			
-			// Load existing layout values into the object (that we got from DB)
-			$ext_params = new JRegistry($ext_params_str); // and for J1.5:  new JParameter($ext_params_str);
-			foreach ($jform->getGroup($grpname) as $field) {
-				$fieldname =  $field->__get('fieldname');
-				$value = $ext_params->get($fieldname);
-				if (strlen($value)) $jform->setValue($fieldname, $grpname, $value);
+			else {
+				echo '<div class="alert alert-info">Currently selected layout: <b>"'.$layout_name.'"</b> does not have layout specific parameters</div>';
+				exit;
 			}
 		}
-		else {
-			// Create a parameters object
-			$form = new JParameter('', $layoutpath);
-			
-			// Load existing layout values into the object (that we got from DB)
-			$form->loadINI($ext_params_str);
+		
+		// Get data from the model
+		// Load XML file
+		if (FLEXI_J30GE) {
+			$xml = simplexml_load_file($layoutpath);
+			$xmldoc = & $xml;
+		} else {
+			$xml = JFactory::getXMLParser('Simple');
+			$xml->loadFile($layoutpath);
+			$xmldoc = & $xml->document;
+		}
+		
+		// Create form object, (form name seems not to cause any problem)
+		$form_layout = new JForm('com_flexicontent.template.item', array('control' => 'jform', 'load_data' => true));
+		$tmpl_params = FLEXI_J30GE ? $xmldoc->asXML() : $xmldoc->toString();
+		$form_layout->load($tmpl_params);
+		
+		// Load existing layout values into the object (that we got from DB)
+		$ext_params = new JRegistry($ext_params_str);
+		
+		foreach ($form_layout->getGroup($groupname) as $field)
+		{
+			$fieldname = $field->fieldname;
+			$value = $ext_params->get($fieldname);
+			if (strlen($value)) $form_layout->setValue($fieldname, $groupname, $value);
 		}
 		
 		if ($layout_name)
 		{
-			if (!FLEXI_J16GE) {
-				echo $form->render('params', 'layout' );
-			} else {
-				?>
-				<fieldset class="panelform"><ul class="adminformlist">
-					<?php
-					foreach ($jform->getGroup($grpname) as $field) {
-						echo '<li>'. $field->label . $field->input .'</li>';
-					}
-					?>
-				</ul></fieldset>
+			$fieldSets = $form_layout->getFieldsets($groupname);
+			
+			foreach ($fieldSets as $fsname => $fieldSet) : ?>
+			
+			<div class="fc_layout_box_outer">
+				
 				<?php
-			}
+				if (isset($fieldSet->label) && trim($fieldSet->label)) :
+					echo '<div style="margin:0 0 12px 0; font-size: 16px; background-color: #333; float:none;" class="fcsep_level0">'.JText::_($fieldSet->label).'</div>';
+				endif;
+				if (isset($fieldSet->description) && trim($fieldSet->description)) :
+					echo '<div class="fc-mssg fc-info">'.JText::_($fieldSet->description).'</div>';
+				endif;
+				
+				foreach ($form_layout->getFieldset($fsname) as $field) :
+				
+					if ($field->getAttribute('not_inherited')) continue;
+					if ($field->getAttribute('cssprep')) continue;
+					
+					$_depends = $field->getAttribute('depend_class');
+					
+					//echo $field->label . $field->input;
+					$_label = str_replace('class="', 'class="label label-fcinner ', $field->label);
+					if ($ext_type == 'templates')
+					{
+						$_label = str_replace('jform_attribs_', 'jform_layouts_'.$ext_name.'_', $_label);
+						$_input = str_replace('jform_attribs_', 'jform_layouts_'.$ext_name.'_',
+							str_replace('[attribs]', '[layouts]['.$ext_name.']', $field->input)
+						);
+					}
+					else $_input = $field->input;
+					echo '
+					<fieldset class="panelform '.($_depends ? ' '.$_depends : '').'" id="'.$field->id.'-container">
+						'.($field->label ? '
+							<span class="label-fcouter">
+								'.$_label.'
+							</span>
+							<div class="container_fcfield">
+								'.$_input.'
+							</div>
+						' : $field->input).'
+					</fieldset>';
+				endforeach; ?>
+					
+			</div>
+			
+			<?php endforeach; //fieldSets
 		} else {
-			echo "<br /><span style=\"padding-left:25px;\"'>" . JText::_( 'FLEXI_APPLY_TO_SEE_THE_PARAMETERS' ) . "</span><br /><br />";
+			echo "<br /><div class=\"alert alert-info\" style=\"padding-left:25px;\"'>" . JText::_( 'FLEXI_APPLY_TO_SEE_THE_PARAMETERS' ) . "</div><br />";
 		}
 		//parent::display($tpl);
+	}
+
+
+	function loadlayoutfile()
+	{
+		jimport('joomla.filesystem.file');
+		$app  = JFactory::getApplication();
+		$user = JFactory::getUser();
+		
+		$var['sysmssg'] = '';
+		$var['content'] = '';
+		$var['default_exists'] = '0';
+		
+		// Check for request forgeries
+		if (!JRequest::checkToken()) {
+			$app->enqueueMessage( 'Invalid Token', 'error');
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit;
+		}
+		
+		$common = array(
+			'item.php' => 'item_layouts/modular.php',
+			'item_html5.php' => 'item_layouts/modular_html5.php',
+		);
+		
+		//get vars
+		$load_mode  = JRequest::getVar( 'load_mode', '0' );
+		$layout_name  = JRequest::getVar( 'layout_name', 'default' );
+		$file_subpath = JRequest::getVar( 'file_subpath', '' );
+		$layout_name  = preg_replace("/\.\.\//", "", $layout_name);
+		$file_subpath = preg_replace("/\.\.\//", "", $file_subpath);
+		//$file_subpath = preg_replace("#\\#", DS, $file_subpath);
+		if (!$layout_name) $app->enqueueMessage( 'Layout name is empty / invalid', 'warning');
+		if (!$file_subpath) $app->enqueueMessage( 'File path is empty / invalid', 'warning');
+		
+		if (!$layout_name || !$file_subpath) {
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit();
+		}
+		
+		$path = JPath::clean(JPATH_ROOT.DS.'components'.DS.'com_flexicontent'.DS.'templates'.DS.$layout_name);
+		if (!is_dir($path)) {
+			$app->enqueueMessage( 'Path: '.$path.' was not found', 'warning');
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit();
+		}
+		
+		$file_path = JPath::clean($path.DS.$file_subpath);
+		if (!file_exists($file_path)) {
+			$app->enqueueMessage( 'File: '.$file_path.' was not found', 'warning');
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit();
+		}
+		
+		// CASE of downloading instead of loading the file
+		if ($load_mode == 2) {
+			header("Pragma: public"); // required
+			header("Expires: 0");
+			header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
+			header("Cache-Control: private", false); // required for certain browsers
+			header("Content-Type: text/plain");
+			header("Content-Disposition: attachment; filename=\"".basename($file_subpath)."\";" );
+			header("Content-Transfer-Encoding: binary");
+			header("Content-Length: ".filesize($file_path));
+			readfile($file_path);
+		}
+		
+		// Check if default file path exists
+		$default_path = JPath::clean(JPATH_ROOT.DS.'components'.DS.'com_flexicontent'.DS.'tmpl_common');
+		$default_file = isset($common[$file_subpath]) ? $common[$file_subpath] : $file_subpath;    // Some files do not have the same name as default file
+		$default_file_path = JPath::clean($default_path.DS.$default_file);
+		$default_file_exists = file_exists($default_file_path) ? 1 : 0;
+		
+		// CASE LOADING system's default, set a different path to be read
+		if ($load_mode) {
+			if (!$default_file_exists) {
+				$app->enqueueMessage( 'No default file for: '.$file_subpath.' exists, current file was --reloaded--', 'notice');
+			} else {
+				$file_path = $default_file_path;
+			}
+		}
+		
+		$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+		$var['default_exists'] = (string) $default_file_exists;
+		$var['content'] = file_get_contents($file_path);
+		echo json_encode($var);
+	}
+	
+	
+	function savelayoutfile()
+	{
+		jimport('joomla.filesystem.file');
+		$app  = JFactory::getApplication();
+		$user = JFactory::getUser();
+		
+		$var['sysmssg'] = '';
+		$var['content'] = '';
+		
+		// Check for request forgeries
+		if (!JRequest::checkToken()) {
+			$app->enqueueMessage( 'Invalid Token', 'error');
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit;
+		}
+		
+		//get vars
+		$file_contents = $_POST['file_contents'];
+		$layout_name  = JRequest::getVar( 'layout_name', 'default' );
+		$file_subpath = JRequest::getVar( 'file_subpath', '' );
+		$layout_name  = preg_replace("/\.\.\//", "", $layout_name);
+		$file_subpath = preg_replace("/\.\.\//", "", $file_subpath);
+		if (!$layout_name) $app->enqueueMessage( 'Layout name is empty / invalid', 'warning');
+		if (!$file_subpath) $app->enqueueMessage( 'File path is empty / invalid', 'warning');
+		
+		if (!$layout_name || !$file_subpath) {
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit();
+		}
+		
+		$path = JPath::clean(JPATH_ROOT.DS.'components'.DS.'com_flexicontent'.DS.'templates'.DS.$layout_name);
+		if (!is_dir($path)) {
+			$app->enqueueMessage( 'Layout: '.$layout_name.' was not found', 'warning');
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit();
+		}
+		
+		$file_path = JPath::clean($path.DS.$file_subpath);
+		if (!file_exists($file_path)) {
+			$app->enqueueMessage( 'Layout: '.$layout_name.' was not found', 'warning');
+			$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+			echo json_encode($var);
+			exit();
+		}
+		
+		if (file_put_contents($file_path, $file_contents)) {
+			$app->enqueueMessage( 'File: '.$file_path.' was saved ', 'message');
+			if (preg_match('#\.xml#', $file_path)) {
+				$tmplcache = JFactory::getCache('com_flexicontent_tmpl');
+				$tmplcache->clean();
+			}
+		} else {
+			$app->enqueueMessage( 'Failed to save file: '.$layout_name, 'warning');
+		}
+		
+		$var['sysmssg'] = flexicontent_html::get_system_messages_html();
+		$var['content'] = file_get_contents($file_path);
+		echo json_encode($var);
 	}
 }

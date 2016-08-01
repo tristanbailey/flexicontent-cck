@@ -18,7 +18,8 @@
 
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport('joomla.application.component.view');
+jimport('legacy.view.legacy');
+use Joomla\String\StringHelper;
 
 /**
  * View class for the FLEXIcontent categories screen
@@ -29,45 +30,87 @@ jimport('joomla.application.component.view');
  */
 class FlexicontentViewTypes extends JViewLegacy
 {
-	/**
-	 * Creates the Entrypage
-	 *
-	 * @since 1.0
-	 */
 	function display( $tpl = null )
 	{
-		//initialise variables
-		$app    = JFactory::getApplication();
-		$option = JRequest::getVar('option');
-		$user = JFactory::getUser();
-		$db   = JFactory::getDBO();
-		$document	= JFactory::getDocument();
+		// ********************
+		// Initialise variables
+		// ********************
+		
+		$app     = JFactory::getApplication();
+		$jinput  = $app->input;
+		$option  = $jinput->get('option', '', 'cmd');
+		$view    = $jinput->get('view', '', 'cmd');
 		
 		$cparams  = JComponentHelper::getParams( 'com_flexicontent' );
+		$user     = JFactory::getUser();
+		$db       = JFactory::getDBO();
+		$document = JFactory::getDocument();
+		
+		// Get model
+		$model = $this->getModel();
+
 		$print_logging_info = $cparams->get('print_logging_info');
 		if ( $print_logging_info )  global $fc_run_times;
 		
-		JHTML::_('behavior.tooltip');
 		
-		//get vars
-		$filter_order		  = $app->getUserStateFromRequest( $option.'.types.filter_order', 		'filter_order', 	't.name', 'cmd' );
-		$filter_order_Dir	= $app->getUserStateFromRequest( $option.'.types.filter_order_Dir',	'filter_order_Dir',	'', 'word' );
-		$filter_state 		= $app->getUserStateFromRequest( $option.'.types.filter_state', 		'filter_state', 	'*', 'word' );
-		$search 			= $app->getUserStateFromRequest( $option.'.types.search', 			'search', 			'', 'string' );
-		$search 			= FLEXI_J16GE ? $db->escape( trim(JString::strtolower( $search ) ) ) : $db->getEscaped( trim(JString::strtolower( $search ) ) );
-
-		//add css and submenu to document
-		$document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/flexicontentbackend.css');
-		if      (FLEXI_J30GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j3x.css');
-		else if (FLEXI_J16GE) $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j25.css');
-		else                  $document->addStyleSheet(JURI::base().'components/com_flexicontent/assets/css/j15.css');
 		
-		// Get User's Global Permissions
+		// ***********
+		// Get filters
+		// ***********
+		
+		$count_filters = 0;
+		
+		// various filters
+		$filter_state   = $model->getState('filter_state');
+		$filter_access  = $model->getState('filter_access');
+		if ($filter_state) $count_filters++; if ($filter_access) $count_filters++;
+		
+		// Order and order direction
+		$filter_order      = $model->getState('filter_order');
+		$filter_order_Dir  = $model->getState('filter_order_Dir');
+		
+		// Text search
+		$search = $model->getState( 'search' );
+		$search = $db->escape( StringHelper::trim(StringHelper::strtolower( $search ) ) );
+		
+		
+		
+		// ****************************
+		// Important usability messages
+		// ****************************
+		
+		if ( $cparams->get('show_usability_messages', 1) )
+		{
+		}
+		
+		
+		
+		// **************************
+		// Add css and js to document
+		// **************************
+		
+		flexicontent_html::loadFramework('select2');
+		//JHTML::_('behavior.tooltip');
+		
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontentbackend.css', FLEXI_VHASH);
+		$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/j3x.css', FLEXI_VHASH);
+		
+		
+		
+		// *****************************
+		// Get user's global permissions
+		// *****************************
+		
 		$perms = FlexicontentHelperPerm::getPerm();
+		
+		
+		
+		// ************************
+		// Create Submenu & Toolbar
+		// ************************
 		
 		// Create Submenu (and also check access to current view)
 		FLEXISubmenu('CanTypes');
-
 		
 		// Create document/toolbar titles
 		$doc_title = JText::_( 'FLEXI_TYPES' );
@@ -75,8 +118,7 @@ class FlexicontentViewTypes extends JViewLegacy
 		JToolBarHelper::title( $doc_title, 'types' );
 		$document->setTitle($doc_title .' - '. $site_title);
 		
-		// Create the toolbar
-		$contrl = FLEXI_J16GE ? "types." : "";
+		$contrl = "types.";
 		JToolBarHelper::custom( $contrl.'copy', 'copy.png', 'copy_f2.png', 'FLEXI_COPY' );
 		JToolBarHelper::divider(); JToolBarHelper::spacer();
 		JToolBarHelper::publishList($contrl.'publish');
@@ -94,6 +136,31 @@ class FlexicontentViewTypes extends JViewLegacy
 			'FLEXI_DELETE', 'delete', '', $msg_alert, $msg_confirm,
 			$btn_task, $extra_js, $btn_list=true, $btn_menu=true, $btn_confirm=true);
 		
+		// Checkin
+		JToolbarHelper::checkin($contrl.'checkin');
+		
+		$appsman_path = JPATH_COMPONENT_ADMINISTRATOR.DS.'views'.DS.'appsman';
+		if (file_exists($appsman_path))
+		{
+			$btn_icon = 'icon-download';
+			$btn_name = 'download';
+			$btn_task    = 'appsman.exportxml';
+			$extra_js    = " var f=document.getElementById('adminForm'); f.elements['view'].value='appsman'; jQuery('<input>').attr({type: 'hidden', name: 'table', value: 'flexicontent_types'}).appendTo(jQuery(f));";
+			flexicontent_html::addToolBarButton(
+				'Export now',
+				$btn_name, $full_js='', $msg_alert='', $msg_confirm='Export now as XML',
+				$btn_task, $extra_js, $btn_list=false, $btn_menu=true, $btn_confirm=true, $btn_class="btn-warning", $btn_icon);
+			
+			$btn_icon = 'icon-box-add';
+			$btn_name = 'box-add';
+			$btn_task    = 'appsman.addtoexport';
+			$extra_js    = " var f=document.getElementById('adminForm'); f.elements['view'].value='appsman'; jQuery('<input>').attr({type: 'hidden', name: 'table', value: 'flexicontent_types'}).appendTo(jQuery(f));";
+			flexicontent_html::addToolBarButton(
+				'Add to export',
+				$btn_name, $full_js='', $msg_alert='', $msg_confirm='Add to export list',
+				$btn_task, $extra_js, $btn_list=false, $btn_menu=true, $btn_confirm=true, $btn_class="btn-warning", $btn_icon);
+		}
+		
 		if ($perms->CanConfig) {
 			JToolBarHelper::divider(); JToolBarHelper::spacer();
 			$session = JFactory::getSession();
@@ -106,38 +173,58 @@ class FlexicontentViewTypes extends JViewLegacy
 		
 		// Get data from the model
 		if ( $print_logging_info )  $start_microtime = microtime(true);
-		if (FLEXI_J16GE) {
-			$rows = $this->get( 'Items');
-		} else {
-			$rows = $this->get( 'Data');
-		}
+		$rows       = $this->get( 'Items' );
 		if ( $print_logging_info ) @$fc_run_times['execute_main_query'] += round(1000000 * 10 * (microtime(true) - $start_microtime)) / 10;
+		$pagination = $this->get( 'Pagination' ); // Pagination
 		
 		// Create type's parameters
 		foreach($rows as $type) {
 			$type->config = FLEXI_J16GE ? new JRegistry($type->config) : new JParameter($type->config);
 		}
 		
-		// Create pagination object
-		$pagination = $this->get( 'Pagination' );
-
 		$lists = array();
 		
-		//publish unpublished filter
-		$lists['state']	= JHTML::_('grid.state', $filter_state );
+		// build publication state filter
+		$states 	= array();
+		$states[] = JHTML::_('select.option',  '', '-'/*JText::_( 'FLEXI_SELECT_STATE' )*/ );
+		$states[] = JHTML::_('select.option',  'P', JText::_( 'FLEXI_PUBLISHED' ) );
+		$states[] = JHTML::_('select.option',  'U', JText::_( 'FLEXI_UNPUBLISHED' ) );
+		//$states[] = JHTML::_('select.option',  '-2', JText::_( 'FLEXI_TRASHED' ) );
 		
-		// search filter
+		$lists['state'] = ($filter_state || 1 ? '<label class="label">'.JText::_('FLEXI_STATE').'</label>' : '').
+			JHTML::_('select.genericlist', $states, 'filter_state', 'class="use_select2_lib" size="1" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"', 'value', 'text', $filter_state );
+			//JHTML::_('grid.state', $filter_state );
+		
+		
+		// build access level filter
+		$options = JHtml::_('access.assetgroups');
+		array_unshift($options, JHtml::_('select.option', '', '-'/*JText::_('JOPTION_SELECT_ACCESS')*/) );
+		$fieldname =  $elementid = 'filter_access';
+		$attribs = 'class="use_select2_lib" onchange="document.adminForm.limitstart.value=0; Joomla.submitform()"';
+		$lists['access'] = ($filter_access || 1 ? '<label class="label">'.JText::_('FLEXI_ACCESS').'</label>' : '').
+			JHTML::_('select.genericlist', $options, $fieldname, $attribs, 'value', 'text', $filter_access, $elementid, $translate=true );
+		
+		
+		// text search filter
 		$lists['search']= $search;
-
+		
+		
 		// table ordering
 		$lists['order_Dir'] = $filter_order_Dir;
 		$lists['order'] = $filter_order;
-
+		
+		
 		//assign data to template
-		$this->assignRef('lists'      , $lists);
-		$this->assignRef('rows'      	, $rows);
+		$this->assignRef('CanTemplates', $perms->CanTemplates);
+		$this->assignRef('count_filters', $count_filters);
+		$this->assignRef('lists'			, $lists);
+		$this->assignRef('rows'				, $rows);
 		$this->assignRef('pagination'	, $pagination);
 		
+		$this->assignRef('option', $option);
+		$this->assignRef('view', $view);
+		
+		$this->sidebar = FLEXI_J30GE ? JHtmlSidebar::render() : null;
 		parent::display($tpl);
 	}
 }

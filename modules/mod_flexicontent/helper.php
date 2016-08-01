@@ -18,8 +18,10 @@
 
 // no direct access
 defined('_JEXEC') or die('Restricted access');
-if (!FLEXI_J16GE) jimport('joomla.html.parameter');
 
+use Joomla\String\StringHelper;
+
+if (!defined('DS'))  define('DS',DIRECTORY_SEPARATOR);
 require_once (JPATH_SITE.DS.'administrator'.DS.'components'.DS.'com_flexicontent'.DS.'defineconstants.php');
 require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'helpers'.DS.'route.php');
 require_once (JPATH_SITE.DS.'components'.DS.'com_flexicontent'.DS.'classes'.DS.'flexicontent.helper.php');
@@ -36,6 +38,10 @@ class modFlexicontentHelper
 		$forced_itemid = $params->get('forced_itemid');
 		$db   = JFactory::getDBO();
 		$user = JFactory::getUser();
+		
+		$option = JRequest::getVar('option');
+		$view   = JRequest::getVar('view');
+		
 		// Get IDs of user's access view levels
 		if (!FLEXI_J16GE) $aid = (int) $user->get('aid');
 		else $aid_arr = JAccess::getAuthorisedViewLevels($user->id);
@@ -51,12 +57,6 @@ class modFlexicontentHelper
 		// Default ordering is 'added' if none ordering is set. Also make sure $ordering is an array (of ordering groups)
 		if ( empty($ordering) )    $ordering = array('added');
 		if (!is_array($ordering))  $ordering = explode(',', $ordering);
-		
-		// get module display parameters
-		$moduleclass_sfx	= $params->get('moduleclass_sfx');
-		$layout						= $params->get('layout');
-		$add_ccs					= $params->get('add_ccs');
-		$add_tooltips			= $params->get('add_tooltips', 1);
 		
 		// get other module parameters
 		$method_curlang		= (int)$params->get('method_curlang', 0);
@@ -76,6 +76,8 @@ class modFlexicontentHelper
 		$mod_use_image 		= $params->get('mod_use_image');
 		$mod_image 				= $params->get('mod_image');
 		$mod_link_image		= $params->get('mod_link_image');
+		$mod_default_img_show = $params->get('mod_default_img_show', 1);
+		$mod_default_img_path = $params->get('mod_default_img_path', 'components/com_flexicontent/assets/images/image.png');
 		$mod_width 				= (int)$params->get('mod_width', 80);
 		$mod_height 			= (int)$params->get('mod_height', 80);
 		$mod_method 			= (int)$params->get('mod_method', 1);
@@ -108,7 +110,38 @@ class modFlexicontentHelper
 			$db->setQuery($query);
 			$mod_image_dbdata = $db->loadObject();
 			$mod_image_name = $mod_image_dbdata->name;
-			//$img_fieldparams = FLEXI_J16GE ? new JRegistry($mod_image_dbdata->attribs) : new JParameter($mod_image_dbdata->attribs);
+			//$img_fieldparams = new JRegistry($mod_image_dbdata->attribs);
+		}
+		if ($mod_default_img_show) {
+			$src = $mod_default_img_path;
+			
+			// Default image featured
+			$h		= '&amp;h=' . $mod_height;
+			$w		= '&amp;w=' . $mod_width;
+			$aoe	= '&amp;aoe=1';
+			$q		= '&amp;q=95';
+			$ar 	= '&amp;ar=x';
+			$zc		= $mod_method ? '&amp;zc=' . $mod_method : '';
+			$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+			$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
+			$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
+			
+			$base_url = (!preg_match("#^http|^https|^ftp|^/#i", $src)) ?  JURI::base(true).'/' : '';
+			$thumb_default = JURI::base().'components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$base_url.$src.$conf;
+			
+			// Default image standard
+			$h		= '&amp;h=' . $mod_height_feat;
+			$w		= '&amp;w=' . $mod_width_feat;
+			$aoe	= '&amp;aoe=1';
+			$q		= '&amp;q=95';
+			$ar 	= '&amp;ar=x';
+			$zc		= $mod_method_feat ? '&amp;zc=' . $mod_method_feat : '';
+			$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+			$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
+			$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
+			
+			$base_url = (!preg_match("#^http|^https|^ftp|^/#i", $src)) ?  JURI::base(true).'/' : '';
+			$thumb_default_feat = JURI::base().'components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$base_url.$src.$conf;
 		}
 		
 		// Retrieve custom displayed field data (including their parameters and access):  hits/voting/etc
@@ -118,19 +151,19 @@ class modFlexicontentHelper
 			$disp_field_where = array();
 			if ($display_hits || $display_hits_feat)      $disp_field_where[] = 'field_type="hits"';
 			if ($display_voting || $display_voting_feat)  $disp_field_where[] = 'field_type="voting"';
-			$query .= ' WHERE ' . implode($disp_field_where, ' OR ');
+			$query .= ' WHERE ' . implode(' OR ', $disp_field_where);
 			$db->setQuery($query);
 			$disp_fields_data = $db->loadObjectList('field_type');
 			
 			if ($display_hits || $display_hits_feat) {
 				$hitsfield = $disp_fields_data['hits'];
-				$hitsfield->parameters = FLEXI_J16GE ? new JRegistry($hitsfield->attribs) : new JParameter($hitsfield->attribs);
-				$has_access_hits = FLEXI_J16GE ? in_array($hitsfield->access, $aid_arr) : $hitsfield->access <= $aid;
+				$hitsfield->parameters = new JRegistry($hitsfield->attribs);
+				$has_access_hits = in_array($hitsfield->access, $aid_arr);
 			}
 			if ($display_voting || $display_voting_feat) {
 				$votingfield = $disp_fields_data['voting'];
-				$votingfield->parameters = FLEXI_J16GE ? new JRegistry($votingfield->attribs) : new JParameter($votingfield->attribs);
-				$has_access_voting = FLEXI_J16GE ? in_array($votingfield->access, $aid_arr) : $votingfield->access <= $aid;
+				$votingfield->parameters = new JRegistry($votingfield->attribs);
+				$has_access_voting = in_array($votingfield->access, $aid_arr);
 			}
 		}
 		
@@ -187,7 +220,7 @@ class modFlexicontentHelper
 			
 			// 0. Add ONLY skipfields to the list of fields to be rendered
 			$fields_list = implode(',', $skiponempty_fields);
-			//$skip_params = FLEXI_J16GE ? new JRegistry() : new JParameter("");
+			//$skip_params = new JRegistry();
 			//$skip_params->set('fields',$fields_list);
 			
 			foreach($cat_items_arr as $catid => $cat_items)
@@ -290,11 +323,11 @@ class modFlexicontentHelper
 				JHTML::_('image.site', 'comments.png', 'components/com_flexicontent/assets/images/', NULL, NULL, JText::_( 'FLEXI_COMMENTS_L' ));
 		}
 		
+		$id     = JRequest::getInt('id', 0);   // id of current item
 		
-		$option = JRequest::getVar('option');
-		$view   = JRequest::getVar('view');
-		$isflexi_itemview = ($option == 'com_flexicontent' && $view == FLEXI_ITEMVIEW);
-		$active_item_id = JRequest::getInt('id', 0);
+		$is_content_ext   = $option == 'com_flexicontent' || $option == 'com_content';
+		$isflexi_itemview = $is_content_ext && ($view == 'item' || $view == 'article') && $id;
+		$active_item_id   = $id;
 		
 		$lists_arr = array();
 		foreach($filtered_rows_arr as $catid => $filtered_rows)
@@ -350,7 +383,7 @@ class modFlexicontentHelper
 						}
 						else if ($mod_image)
 						{
-							FlexicontentFields::getFieldDisplay($row, $mod_image_name, null, 'display', 'module');
+							FlexicontentFields::getFieldDisplay($row, $mod_image_name, null, 'display_large_src', 'module');  // just makes sure thumbs are created by requesting a '*_src' display
 							$img_field = & $row->fields[$mod_image_name];
 							if ($mod_use_image_feat==1) {
 								$src = str_replace(JURI::root(), '', @ $img_field->thumbs_src['large'][0] );
@@ -366,6 +399,10 @@ class modFlexicontentHelper
 						{
 							$src = flexicontent_html::extractimagesrc($row);
 						}
+						
+						if (!$thumb && !$src && $mod_default_img_show) {
+							$thumb = $thumb_default_feat;
+						}
 
 						if ($src) {
 							$h		= '&amp;h=' . $mod_height_feat;
@@ -373,7 +410,7 @@ class modFlexicontentHelper
 							$aoe	= '&amp;aoe=1';
 							$q		= '&amp;q=95';
 							$zc		= $mod_method_feat ? '&amp;zc=' . $mod_method_feat : '';
-							$ext = pathinfo($src, PATHINFO_EXTENSION);
+							$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 							$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
 							$conf	= $w . $h . $aoe . $q . $zc . $f;
 							
@@ -384,6 +421,7 @@ class modFlexicontentHelper
 					$lists[$ord]['featured'][$i] = new stdClass();
 					$lists[$ord]['featured'][$i]->_row = $row;
 					$lists[$ord]['featured'][$i]->id = $row->id;
+					$lists[$ord]['featured'][$i]->type_id = $row->type_id;
 					$lists[$ord]['featured'][$i]->is_active_item = ($isflexi_itemview && $row->id==$active_item_id);
 					
 					//date
@@ -397,12 +435,12 @@ class modFlexicontentHelper
 		 			  
 	 			  	$lists[$ord]['featured'][$i]->date_created = "";
 						if (in_array('created',$date_fields_feat)) { // Created
-							$lists[$ord]['featured'][$i]->date_created .= $params->get('date_label_feat',1) ? '<span class="date_label_feat">'.JText::_('FLEXI_DATE_CREATED').':</span> ' : '';
+							$lists[$ord]['featured'][$i]->date_created .= $params->get('date_label_feat',1) ? '<span class="date_label_feat">'.JText::_('FLEXI_DATE_CREATED').'</span> ' : '';
 							$lists[$ord]['featured'][$i]->date_created .= '<span class="date_value_feat">' . JHTML::_('date', $row->created, $dateformat) . '</span>';
 						}
 	 			  	$lists[$ord]['featured'][$i]->date_modified = "";
 						if (in_array('modified',$date_fields_feat)) { // Modified
-							$lists[$ord]['featured'][$i]->date_modified .= $params->get('date_label_feat',1) ? '<span class="date_label_feat">'.JText::_('FLEXI_DATE_MODIFIED').':</span> ' : '';
+							$lists[$ord]['featured'][$i]->date_modified .= $params->get('date_label_feat',1) ? '<span class="date_label_feat">'.JText::_('FLEXI_DATE_MODIFIED').'</span> ' : '';
 							$modified_date = ($row->modified != $db->getNullDate()) ? JHTML::_('date', $row->modified, $dateformat) : JText::_( 'FLEXI_DATE_NEVER' );
 							$lists[$ord]['featured'][$i]->date_modified .= '<span class="date_value_feat">' . $modified_date . '</span>';
 						}
@@ -413,26 +451,26 @@ class modFlexicontentHelper
 					$lists[$ord]['featured'][$i]->hits_rendered = '';
 					if ($display_hits_feat && $has_access_hits) {
 						FlexicontentFields::loadFieldConfig($hitsfield, $row);
-						$lists[$ord]['featured'][$i]->hits_rendered .= $params->get('hits_label_feat') ? '<span class="hits_label_feat">'.JText::_($hitsfield->label).':</span> ' : '';
+						$lists[$ord]['featured'][$i]->hits_rendered .= $params->get('hits_label_feat') ? '<span class="hits_label_feat">'.JText::_($hitsfield->label).'</span> ' : '';
 						$lists[$ord]['featured'][$i]->hits_rendered .= $hits_icon;
 						$lists[$ord]['featured'][$i]->hits_rendered .= ' ('.$row->hits.(!$params->get('hits_label_feat') ? ' '.JTEXT::_('FLEXI_HITS_L') : '').')';
 					}
 					$lists[$ord]['featured'][$i]->voting = '';
 					if ($display_voting_feat && $has_access_voting) {
 						FlexicontentFields::loadFieldConfig($votingfield, $row);
-						$lists[$ord]['featured'][$i]->voting .= $params->get('voting_label_feat') ? '<span class="voting_label_feat">'.JText::_($votingfield->label).':</span> ' : '';
-						$lists[$ord]['featured'][$i]->voting .= '<span class="voting_value_feat">' . flexicontent_html::ItemVoteDisplay( $votingfield, $row->id, $row->rating_sum, $row->rating_count, 'main', '', $params->get('vote_stars_feat',1), $params->get('allow_vote_feat',0), $params->get('vote_counter_feat',1), !$params->get('voting_label_feat') ) .'</span>';
+						$lists[$ord]['featured'][$i]->voting .= $params->get('voting_label_feat') ? '<span class="voting_label_feat">'.JText::_($votingfield->label).'</span> ' : '';
+						$lists[$ord]['featured'][$i]->voting .= '<div class="voting_value_feat">' . flexicontent_html::ItemVoteDisplay( $votingfield, $row->id, $row->rating_sum, $row->rating_count, 'main', '', $params->get('vote_stars_feat',1), $params->get('allow_vote_feat',0), $params->get('vote_counter_feat',1), !$params->get('voting_label_feat') ) .'</div>';
 					}
 					if ($display_comments_feat) {
 						$lists[$ord]['featured'][$i]->comments = $row->comments_total;
-						$lists[$ord]['featured'][$i]->comments_rendered = $params->get('comments_label_feat') ? '<span class="comments_label_feat">'.JText::_('FLEXI_COMMENTS').':</span> ' : '';
+						$lists[$ord]['featured'][$i]->comments_rendered = $params->get('comments_label_feat') ? '<span class="comments_label_feat">'.JText::_('FLEXI_COMMENTS').'</span> ' : '';
 						$lists[$ord]['featured'][$i]->comments_rendered .= $comments_icon;
 						$lists[$ord]['featured'][$i]->comments_rendered .= ' ('.$row->comments_total.(!$params->get('comments_label_feat') ? ' '.JTEXT::_('FLEXI_COMMENTS_L') : '').')';
 					}
 					$lists[$ord]['featured'][$i]->catid = $row->catid; 
 					$lists[$ord]['featured'][$i]->itemcats = explode("," , $row->itemcats);
 					$lists[$ord]['featured'][$i]->link 	= JRoute::_(FlexicontentHelperRoute::getItemRoute($row->slug, $row->categoryslug, $forced_itemid, $row).(($method_curlang == 1) ? "&lang=".substr($row->language ,0,2) : ""));
-					$lists[$ord]['featured'][$i]->title	= (strlen($row->title) > $cuttitle_feat) ? JString::substr($row->title, 0, $cuttitle_feat) . '...' : $row->title;
+					$lists[$ord]['featured'][$i]->title	= StringHelper::strlen($row->title) > $cuttitle_feat  ?  StringHelper::substr($row->title, 0, $cuttitle_feat) . '...'  :  $row->title;
 					$lists[$ord]['featured'][$i]->alias	= $row->alias;
 					$lists[$ord]['featured'][$i]->fulltitle = $row->title;
 					$lists[$ord]['featured'][$i]->text = ($mod_do_stripcat_feat)? flexicontent_html::striptagsandcut($row->introtext, $mod_cut_text_feat) : $row->introtext;
@@ -481,7 +519,7 @@ class modFlexicontentHelper
 						}
 						else if ($mod_image)
 						{
-							FlexicontentFields::getFieldDisplay($row, $mod_image_name, null, 'display', 'module');
+							FlexicontentFields::getFieldDisplay($row, $mod_image_name, null, 'display_large_src', 'module');  // just makes sure thumbs are created by requesting a '*_src' display
 							$img_field = & $row->fields[$mod_image_name];
 							
 							if ($mod_use_image==1) {
@@ -499,13 +537,17 @@ class modFlexicontentHelper
 							$src = flexicontent_html::extractimagesrc($row);
 						}
 						
+						if (!$thumb && !$src && $mod_default_img_show) {
+							$thumb = $thumb_default;
+						}
+
 						if ($src) {
 							$h		= '&amp;h=' . $mod_height;
 							$w		= '&amp;w=' . $mod_width;
 							$aoe	= '&amp;aoe=1';
 							$q		= '&amp;q=95';
 							$zc		= $mod_method ? '&amp;zc=' . $mod_method : '';
-							$ext = pathinfo($src, PATHINFO_EXTENSION);
+							$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 							$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
 							$conf	= $w . $h . $aoe . $q . $zc . $f;
 							
@@ -519,6 +561,7 @@ class modFlexicontentHelper
 					$lists[$ord]['standard'][$i] = new stdClass();
 					$lists[$ord]['standard'][$i]->_row = $row;
 					$lists[$ord]['standard'][$i]->id = $row->id;
+					$lists[$ord]['standard'][$i]->type_id = $row->type_id;
 					$lists[$ord]['standard'][$i]->is_active_item = ($isflexi_itemview && $row->id==$active_item_id);
 					
 					//date
@@ -532,12 +575,12 @@ class modFlexicontentHelper
 		 			  
 	 			  	$lists[$ord]['standard'][$i]->date_created = "";
 						if (in_array('created',$date_fields)) { // Created
-							$lists[$ord]['standard'][$i]->date_created .= $params->get('date_label',1) ? '<span class="date_label">'.JText::_('FLEXI_DATE_CREATED').':</span> ' : '';
+							$lists[$ord]['standard'][$i]->date_created .= $params->get('date_label',1) ? '<span class="date_label">'.JText::_('FLEXI_DATE_CREATED').'</span> ' : '';
 							$lists[$ord]['standard'][$i]->date_created .= '<span class="date_value">' . JHTML::_('date', $row->created, $dateformat) . '</span>';
 						}
 	 			  	$lists[$ord]['standard'][$i]->date_modified = "";
 						if (in_array('modified',$date_fields)) { // Modified
-							$lists[$ord]['standard'][$i]->date_modified .= $params->get('date_label',1) ? '<span class="date_label">'.JText::_('FLEXI_DATE_MODIFIED').':</span> ' : '';
+							$lists[$ord]['standard'][$i]->date_modified .= $params->get('date_label',1) ? '<span class="date_label">'.JText::_('FLEXI_DATE_MODIFIED').'</span> ' : '';
 							$modified_date = ($row->modified != $db->getNullDate()) ? JHTML::_('date', $row->modified, $dateformat) : JText::_( 'FLEXI_DATE_NEVER' );
 							$lists[$ord]['standard'][$i]->date_modified .= '<span class="date_value_feat">' . $modified_date . '</span>';
 						}
@@ -548,26 +591,26 @@ class modFlexicontentHelper
 					$lists[$ord]['standard'][$i]->hits_rendered = '';
 					if ($display_hits && $has_access_hits) {
 						FlexicontentFields::loadFieldConfig($hitsfield, $row);
-						$lists[$ord]['standard'][$i]->hits_rendered .= $params->get('hits_label') ? '<span class="hits_label">'.JText::_($hitsfield->label).':</span> ' : '';
+						$lists[$ord]['standard'][$i]->hits_rendered .= $params->get('hits_label') ? '<span class="hits_label">'.JText::_($hitsfield->label).'</span> ' : '';
 						$lists[$ord]['standard'][$i]->hits_rendered .= $hits_icon;
 						$lists[$ord]['standard'][$i]->hits_rendered .= ' ('.$row->hits.(!$params->get('hits_label') ? ' '.JTEXT::_('FLEXI_HITS_L') : '').')';
 					}
 					$lists[$ord]['standard'][$i]->voting = '';
 					if ($display_voting && $has_access_voting) {
 						FlexicontentFields::loadFieldConfig($votingfield, $row);
-						$lists[$ord]['standard'][$i]->voting .= $params->get('voting_label') ? '<span class="voting_label">'.JText::_($votingfield->label).':</span> ' : '';
-						$lists[$ord]['standard'][$i]->voting .= '<span class="voting_value">' . flexicontent_html::ItemVoteDisplay( $votingfield, $row->id, $row->rating_sum, $row->rating_count, 'main', '', $params->get('vote_stars',1), $params->get('allow_vote',0), $params->get('vote_counter',1), !$params->get('voting_label')) .'</span>';
+						$lists[$ord]['standard'][$i]->voting .= $params->get('voting_label') ? '<span class="voting_label">'.JText::_($votingfield->label).'</span> ' : '';
+						$lists[$ord]['standard'][$i]->voting .= '<div class="voting_value">' . flexicontent_html::ItemVoteDisplay( $votingfield, $row->id, $row->rating_sum, $row->rating_count, 'main', '', $params->get('vote_stars',1), $params->get('allow_vote',0), $params->get('vote_counter',1), !$params->get('voting_label')) .'</div>';
 					}
 					if ($display_comments) {
 						$lists[$ord]['standard'][$i]->comments = $row->comments_total;
-						$lists[$ord]['standard'][$i]->comments_rendered = $params->get('comments_label') ? '<span class="comments_label">'.JText::_('FLEXI_COMMENTS').':</span> ' : '';
+						$lists[$ord]['standard'][$i]->comments_rendered = $params->get('comments_label') ? '<span class="comments_label">'.JText::_('FLEXI_COMMENTS').'</span> ' : '';
 						$lists[$ord]['standard'][$i]->comments_rendered .= $comments_icon;
 						$lists[$ord]['standard'][$i]->comments_rendered .= ' ('.$row->comments_total.(!$params->get('comments_label') ? ' '.JTEXT::_('FLEXI_COMMENTS_L') : '').')';
 					}
 					$lists[$ord]['standard'][$i]->catid = $row->catid;
 					$lists[$ord]['standard'][$i]->itemcats = explode("," , $row->itemcats);
 					$lists[$ord]['standard'][$i]->link	= JRoute::_(FlexicontentHelperRoute::getItemRoute($row->slug, $row->categoryslug, $forced_itemid, $row).(($method_curlang == 1) ? "&lang=".substr($row->language ,0,2) : ""));
-					$lists[$ord]['standard'][$i]->title	= (strlen($row->title) > $cuttitle) ? JString::substr($row->title, 0, $cuttitle) . '...' : $row->title;
+					$lists[$ord]['standard'][$i]->title	= StringHelper::strlen($row->title) > $cuttitle  ?  StringHelper::substr($row->title, 0, $cuttitle) . '...'  :  $row->title;
 					$lists[$ord]['standard'][$i]->alias	= $row->alias;
 					$lists[$ord]['standard'][$i]->fulltitle = $row->title;
 					$lists[$ord]['standard'][$i]->text = ($mod_do_stripcat)? flexicontent_html::striptagsandcut($row->introtext, $mod_cut_text) : $row->introtext;
@@ -635,7 +678,7 @@ class modFlexicontentHelper
 		// Date-Times are stored as UTC, we should use current UTC time to compare and not user time (requestTime),
 		//  thus the items are published globally at the time the author specified in his/her local clock
 		//$now		= $app->get('requestTime');
-		$now			= FLEXI_J16GE ? JFactory::getDate()->toSql() : JFactory::getDate()->toMySQL();
+		$now			= JFactory::getDate()->toSql();
 		$nullDate	= $db->getNullDate();
 		
 		// $display_category_data
@@ -668,6 +711,7 @@ class modFlexicontentHelper
 		$catids 				= $params->get('catids', array());
 		$behaviour_cat 	= $params->get('behaviour_cat', 0);
 		$treeinclude 		= $params->get('treeinclude');
+		$cat_combine    = $params->get('cat_combine', 0);
 
 		// types scope parameters
 		$method_types 	= (int)$params->get('method_types', 1);
@@ -696,6 +740,7 @@ class modFlexicontentHelper
 		// date scope parameters
 		$method_dates	= (int)$params->get('method_dates', 1);  // parameter added later, maybe not to break compatibility this should be INCLUDE=3 by default ?
 		$date_type		= (int)$params->get('date_type', 0);
+		$nulldates		= (int)$params->get('nulldates', 0);
 		$bdate 				= $params->get('bdate', '');
 		$edate 				= $params->get('edate', '');
 		$raw_bdate		= $params->get('raw_bdate', 0);
@@ -713,6 +758,8 @@ class modFlexicontentHelper
 			$comp = 'i.modified';
 		} else if ($date_type == 2) { // publish up
 			$comp = 'i.publish_up';
+		} else if ($date_type == 4) { // publish down
+			$comp = 'i.publish_down';
 		} else { // $date_type == 3
 			$comp = 'dfrel.value';
 		}
@@ -741,8 +788,13 @@ class modFlexicontentHelper
 		
 		$where  = ' WHERE c.published = 1';
 		$where .= FLEXI_J16GE ? '' : ' AND i.sectionid = ' . FLEXI_SECTION;
-		$where .= ' AND ( i.publish_up = '.$db->Quote($nullDate).' OR i.publish_up <= '.$db->Quote($now).' )';
-		$where .= ' AND ( i.publish_down = '.$db->Quote($nullDate).' OR i.publish_down >= '.$db->Quote($now).' )';
+		
+		$ignore_up_down_dates = $params->get('ignore_up_down_dates', 0);  // 1: ignore publish_up, 2: ignore publish_donw, 3: ignore both
+		$ignoreState =  $params->get('use_list_items_in_any_state_acl', 0) && $user->authorise('flexicontent.ignoreviewstate', 'com_flexicontent');
+		if (!$ignoreState && $ignore_up_down_dates != 3 && $ignore_up_down_dates != 1)
+			$where .= ' AND ( i.publish_up = '.$db->Quote($nullDate).' OR i.publish_up <= '.$db->Quote($now).' )';
+		if (!$ignoreState && $ignore_up_down_dates != 3 && $ignore_up_down_dates != 2)
+			$where .= ' AND ( i.publish_down = '.$db->Quote($nullDate).' OR i.publish_down >= '.$db->Quote($now).' )';
 		
 		
 		// *********************
@@ -751,27 +803,11 @@ class modFlexicontentHelper
 		
 		$joinaccess = '';
 		if (!$show_noauth) {
-			if (FLEXI_J16GE) {
-				$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
-				$aid_list = implode(",", $aid_arr);
-				$where .= ' AND ty.access IN (0,'.$aid_list.')';
-				$where .= ' AND mc.access IN (0,'.$aid_list.')';
-				$where .= ' AND  i.access IN (0,'.$aid_list.')';
-			} else {
-				$aid = (int) $user->get('aid');
-				if (FLEXI_ACCESS) {
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gt ON ty.id = gt.axo AND gt.aco = "read" AND gt.axosection = "type"';
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gc ON  c.id = gc.axo AND gc.aco = "read" AND gc.axosection = "category"';
-					$joinaccess .= ' LEFT JOIN #__flexiaccess_acl AS gi ON  i.id = gi.axo AND gi.aco = "read" AND gi.axosection = "item"';
-					$where .= ' AND (gt.aro IN ( '.$user->gmid.' ) OR ty.access <= '. $aid . ')';
-					$where .= ' AND (gc.aro IN ( '.$user->gmid.' ) OR mc.access <= '. $aid . ')';
-					$where .= ' AND (gi.aro IN ( '.$user->gmid.' ) OR  i.access <= '. $aid . ')';
-				} else {
-					$where .= ' AND ty.access <= '.$aid;
-					$where .= ' AND mc.access <= '.$aid;
-					$where .= ' AND  i.access <= '.$aid;
-				}
-			}
+			$aid_arr = JAccess::getAuthorisedViewLevels($user->id);
+			$aid_list = implode(",", $aid_arr);
+			$where .= ' AND ty.access IN (0,'.$aid_list.')';
+			$where .= ' AND mc.access IN (0,'.$aid_list.')';
+			$where .= ' AND  i.access IN (0,'.$aid_list.')';
 		}
 		
 		
@@ -779,20 +815,25 @@ class modFlexicontentHelper
 		// NON-STATIC behaviors that need current item information
 		// *******************************************************
 		
-		$isflexi_itemview = ($option == 'com_flexicontent' && $view == FLEXI_ITEMVIEW && JRequest::getInt('id'));
+		$id     = JRequest::getInt('id', 0);   // id of current item
+		$cid    = JRequest::getInt( ($option == 'com_content' ? 'id' : 'cid') );  // current category ID or category ID of current item
+		
+		$is_content_ext   = $option == 'com_flexicontent' || $option == 'com_content';
+		$isflexi_itemview = $is_content_ext && ($view == 'item' || $view == 'article') && $id;
+		$isflexi_catview  = $is_content_ext && $view == 'category' && ( $cid || JRequest::getVar('cids') );
+		
 		$curritem_date_field_needed =
 			$behaviour_dates &&  // Dynamic
 			$date_compare && // Comparing to current item
 			$date_type==3 && // Comparing to custom date field
 			$datecomp_field;  // Date field selected
 		
-		if ( ($behaviour_cat || $behaviour_types || $behaviour_auth || $behaviour_items || $curritem_date_field_needed || $behaviour_filt) && $isflexi_itemview ) {
+		if ( ($behaviour_cat || $behaviour_types || $behaviour_auth || $behaviour_items || $curritem_date_field_needed || $behaviour_filt) && $isflexi_itemview )
+		{
 			// initialize variables
-			$cid		= JRequest::getInt('cid');
-			$id			= JRequest::getInt('id');
 			$Itemid	= JRequest::getInt('Itemid');
-			// Check for new item nothing to retrieve,
-			// NOTE: aborting execution if current view is not item view, but item view is required
+			
+			// NOTE: aborting execution if item view is required, but current view is not item view
 			// and also proper usage of current item, both of these will be handled by SCOPEs
 			
 			$sel_date = ''; $join_date = '';
@@ -803,6 +844,7 @@ class modFlexicontentHelper
 					. '   ON ( i.id = dfrel.item_id AND dfrel.valueorder = 1 AND dfrel.field_id = '.$datecomp_field.' )';
 			}
 			
+			// Check for new item form, aka nothing to retrieve
 			if ( $id ) {
 				$query = 'SELECT i.*, ie.*, GROUP_CONCAT(ci.catid SEPARATOR ",") as itemcats'
 							. $sel_date
@@ -817,18 +859,21 @@ class modFlexicontentHelper
 				$curitem	= $db->loadObject();
 				
 				// Get item dates
+				$idate = null;
 				if ($date_type == 0) {        // created
 					$idate = $curitem->created;			
 				} else if ($date_type == 1) { // modified
 					$idate = $curitem->modified;
 				} else if ($date_type == 2) { // publish up
 					$idate = $curitem->publish_up;
-				} else { // $date_type == 3
+				} else if (isset($curitem->custom_date)) { // $date_type == 3
 					$idate = $curitem->custom_date;
 				}
 				
-				$idate 	= explode(' ', $idate);
-				$cdate 	= $idate[0] . ' 00:00:00';
+				if ($idate) {
+					$idate 	= explode(' ', $idate);
+					$cdate 	= $idate[0] . ' 00:00:00';
+				}
 				$curritemcats = explode(',', $curitem->itemcats);
 			}
 		}
@@ -883,14 +928,12 @@ class modFlexicontentHelper
 		// joomla featured property scope
 		// ******************************
 		
-		if (FLEXI_J16GE) {
-	  	if ($method_featured == 1) { // exclude method  ---  exclude currently logged user favourites
-				$where .= ' AND i.featured=0';
-			} else if ($method_featured == 2) { // include method  ---  include currently logged user favourites
-				$where .= ' AND i.featured=1';
-			} else {
-			  // All Items regardless of being featured or not
-			}
+  	if ($method_featured == 1) { // exclude method  ---  exclude currently logged user favourites
+			$where .= ' AND i.featured=0';
+		} else if ($method_featured == 2) { // include method  ---  include currently logged user favourites
+			$where .= ' AND i.featured=1';
+		} else {
+		  // All Items regardless of being featured or not
 		}
 		
 		
@@ -900,8 +943,10 @@ class modFlexicontentHelper
 		
 		$item_states = is_array($item_states) ? implode(',', $item_states) : $item_states;
 		if ($method_states==0) {
-		  // method normal: Published item states
-			$where .= ' AND i.state IN ( 1, -5 )';
+			if (!$ignoreState) {
+			  // method normal: Published item states
+				$where .= ' AND i.state IN ( 1, -5 )';
+			}
 		} else {
 			// exclude trashed
 			$where .= ' AND i.state <> -2';
@@ -926,7 +971,7 @@ class modFlexicontentHelper
 		if ( !$behaviour_cat && $method_cat == 1 )
 		{
 			if ($apply_config_per_category) {
-				echo "<b>WARNING:</b> Misconfiguration warning, APPLY CONFIGURATION PER CATEGORY is possible only if CATEGORY SCOPE is set to either (a) INCLUDE(static selection of categories) or (b) items in same category as current item<br/>";
+				echo "<b>WARNING:</b> Misconfiguration warning, APPLY CONFIGURATION PER CATEGORY is possible only if CATEGORY SCOPE is set to either (a) INCLUDE(static selection of categories) or (b) items in same category as current item / or current category of category view<br/>";
 				return;
 			}
 		}
@@ -952,45 +997,88 @@ class modFlexicontentHelper
 			
 			if ($method_cat == 2) { // exclude method
 				if ($apply_config_per_category) {
-					echo "<b>WARNING:</b> Misconfiguration warning, APPLY CONFIGURATION PER CATEGORY is possible only if CATEGORY SCOPE is set to either (a) INCLUDE(static selection of categories) or (b) items in same category as current item<br/>";
+					echo "<b>WARNING:</b> Misconfiguration warning, APPLY CONFIGURATION PER CATEGORY is possible only if CATEGORY SCOPE is set to either (a) INCLUDE(static selection of categories) or (b) items in same category as current item / or current category of category view<br/>";
 					return;
 				}
 				$where .= ' AND c.id NOT IN (' . implode(',', $catids_arr) . ')';
-			} else if ($method_cat == 3) { // include method
+			}
+			
+			else if ($method_cat == 3) { // include method
+				
 				if (!$apply_config_per_category) {
-					$where .= ' AND c.id IN (' . implode(',', $catids_arr) . ')';
-				} else {
+					if ($cat_combine)
+					{
+						$where .= ' AND i.id IN ('
+							.' SELECT DISTINCT itemid'
+							.' FROM #__flexicontent_cats_item_relations'
+							.' WHERE catid IN ('.implode(',', $catids_arr).')'
+							.' GROUP by itemid HAVING COUNT(*) >= '.count($catids_arr) .')'
+						;
+					}
+					else
+						$where .= ' AND c.id IN (' . implode(',', $catids_arr) . ')';
+				}
+				
+				else {
 					// *** Applying configuration per category ***
 					foreach($catids_arr as $catid)                // The items retrieval query will be executed ... once per EVERY category
 						$multiquery_cats[$catid] = ' AND c.id = '.$catid;
 					$params->set('dynamic_catids', serialize($catids_arr));  // Set dynamic catids to be used by the getCategoryData
 				}
+				
 			}
 		}
 		
 		// non-ZERO 'behaviour' means dynamically decided records
 		else
 		{
-			if ( !$isflexi_itemview ) {
-				return;  // current view is not item view ... , nothing to display
-			}
-			
-			if ($behaviour_cat == 2 && $apply_config_per_category) {
-				echo "<b>WARNING:</b> Misconfiguration warning, APPLY CONFIGURATION PER CATEGORY is possible only if CATEGORY SCOPE is set to either (a) INCLUDE(static selection of categories) or (b) items in same category as current item<br/>";
+			if (($behaviour_cat == 2 || $behaviour_cat == 4) && $apply_config_per_category) {
+				echo "<b>WARNING:</b> Misconfiguration warning, APPLY CONFIGURATION PER CATEGORY is possible only if CATEGORY SCOPE is set to either (a) INCLUDE(static selection of categories) or (b) items in same category as current item / or current category of category view<br/>";
 				return;
 			}
 			
+			$currcat_valid_case = ($behaviour_cat==1 && $isflexi_itemview) || ($behaviour_cat==3 && $isflexi_catview);
+			if ( !$currcat_valid_case ) {
+				return;  // current view is not item OR category view ... , nothing to display
+			}
+			
 			// IF $cid is not set then use the main category id of the (current) item
-			$cid = $cid ? $cid : $curitem->catid;
+			if ($isflexi_itemview)
+			{
+				$cid = $cid ? $cid : $curitem->catid;
+				
+				// Retrieve extra categories, such children or parent categories
+				$catids_arr = flexicontent_cats::getExtraCats(array($cid), $treeinclude, $curritemcats);
+			}
+			
+			else if ($isflexi_catview)
+			{
+				$cid = JRequest::getInt( ($option == 'com_content' ? 'id' : 'cid'), 0);
+				if (!$cid) {
+					$_cids = JRequest::getVar('cids', '');
+					if ( !is_array($_cids) ) {
+						$_cids = preg_replace( '/[^0-9,]/i', '', (string) $_cids );
+						$_cids = explode(',', $_cids);
+					}
+					// make sure given data are integers ... !!
+					$cids = array();
+					foreach ($_cids as $i => $_id)  if ((int)$_id) $cids[] = (int)$_id;
+					
+					// Retrieve extra categories, such children or parent categories
+					$catids_arr = flexicontent_cats::getExtraCats(array($cid), $treeinclude, array());
+				}
+			} else {
+				return;  // nothing to display
+			}
 			
 			// Retrieve extra categories, such children or parent categories
-			$catids_arr = flexicontent_cats::getExtraCats(array($cid), $treeinclude, $curritemcats);
+			$catids_arr = flexicontent_cats::getExtraCats(array($cid), $treeinclude, $isflexi_itemview ? $curritemcats : array());
 			if (empty($catids_arr)) {
 				if ($show_nocontent_msg) echo JText::_("No viewable content in Current View for your Access Level");
 				return;
 			}
 			
-			if ($behaviour_cat == 1) {
+			if ($behaviour_cat == 1 || $behaviour_cat == 3) {
 				if (!$apply_config_per_category) {
 					$where .= ' AND c.id IN (' . implode(',', $catids_arr) . ')';
 				} else {
@@ -1137,7 +1225,7 @@ class modFlexicontentHelper
 					.$where2
 					;
 				$db->setQuery($query2);
-				$related = FLEXI_J16GE ? $db->loadColumn() : $db->loadResultArray();
+				$related = $db->loadColumn();
 				$related = is_array($related) ? array_map( 'intval', $related ) : $related;
 			}
 			
@@ -1161,7 +1249,7 @@ class modFlexicontentHelper
 					' FROM #__flexicontent_tags_item_relations' .
 					' WHERE itemid = '.(int) $id;
 			$db->setQuery($query2);
-			$tags = FLEXI_J16GE ? $db->loadColumn() : $db->loadResultArray();
+			$tags = $db->loadColumn();
 			$tags = array_diff($tags,$excluded_tags);
 			
 			unset($related);
@@ -1176,7 +1264,7 @@ class modFlexicontentHelper
 						$where2
 						;
 				$db->setQuery($query2);
-				$related = FLEXI_J16GE ? $db->loadColumn() : $db->loadResultArray();
+				$related = $db->loadColumn();
 			}
 			
 			if (isset($related) && count($related)) {
@@ -1202,6 +1290,9 @@ class modFlexicontentHelper
 			
 			// Make sure tag_ids is an array
 			$tag_ids = !is_array($tag_ids) ? array($tag_ids) : $tag_ids ;
+			
+			// Require ALL is meant only for "include" method
+			if ($method_tags == 2) $tag_combine = 0;
 			
 			// Create query to match item ids using the selected tags
 			$query2 = 'SELECT '.($tag_combine ? 'itemid' : 'DISTINCT itemid')
@@ -1235,18 +1326,22 @@ class modFlexicontentHelper
 			
 			if (!$raw_edate && $edate && !FLEXIUtilities::isSqlValidDate($edate)) {
 				echo "<b>WARNING:</b> Misconfigured date scope, you have entered invalid -END- date:<br>(a) Enter a valid date via callendar OR <br>(b) leave blank OR <br>(c) choose (non-static behavior 'custom offset') and enter custom offset e.g. five days ago (be careful with space character): -5 d<br/>";
-				//$edate = '';
 				return;
 			} else if ($edate) {
-				$where .= ' AND '.$negate_op.' ( '.$comp.' <= '.(!$raw_edate ? $db->Quote($edate) : $edate).' )';
+				$where .= ' AND ( '
+					.$negate_op.' ( '.$comp.' <= '.(!$raw_edate ? $db->Quote($edate) : $edate).' )'
+					.($nulldates ? ' OR '.$comp.' IS NULL OR '.$comp.'="" ' : '')
+				.' )';
 			}
 			
 			if (!$raw_bdate && $bdate && !FLEXIUtilities::isSqlValidDate($bdate)) {
 				echo "<b>WARNING:</b> Misconfigured date scope, you have entered invalid -BEGIN- date:<br>(a) Enter a valid date via callendar OR <br>(b) leave blank OR <br>(c) choose (non-static behavior 'custom offset') and enter custom offset e.g. five days ago (be careful with space character): -5 d<br/>";
-				//$bdate = '';
 				return;
 			} else if ($bdate) {
-				$where .= ' AND '.$negate_op.' ( '.$comp.' >= '.(!$raw_bdate ? $db->Quote($bdate) : $bdate).' )';
+				$where .= ' AND ( '
+					.$negate_op.' ( '.$comp.' >= '.(!$raw_bdate ? $db->Quote($bdate) : $bdate).' )'
+					.($nulldates ? ' OR '.$comp.' IS NULL OR '.$comp.'="" ' : '')
+				.' )';
 			}
 		}
 		
@@ -1263,21 +1358,34 @@ class modFlexicontentHelper
 			{
 				case '1' : // custom offset
 					if ($edate) {
-						$edate = explode(' ', $edate);
-						if (count($edate)!=2) {
+						$edate = array(
+							// \s will remove spaces too
+							0 => preg_replace("/[^-+0-9\s]/", "", $edate),
+							1=> preg_replace("/[0-9-+\s]/", "", $edate)
+						);
+						if (empty($edate[1])) {
 							echo "<b>WARNING:</b> Misconfigured date scope, you have entered invalid -END- date:Custom offset is invalid e.g. in order to enter five days ago (be careful with space character) use: -5 d (DO NOT FORGET the space between e.g. '-5 d')<br/>";
 							return;
 						} else {
-							$where .= ' AND ( '.$comp.' < '.$db->Quote(date_time::shift_dates($cdate, $edate[0], $edate[1])).' )';
+							$where .= ' AND ( '
+								.$comp.' < '.$db->Quote(date_time::shift_dates($cdate, $edate[0], $edate[1]))
+								.($nulldates ? ' OR '.$comp.' IS NULL OR '.$comp.'="" ' : '')
+							.' )';
 						}
 					}
 					if ($bdate) {
-						$bdate = explode(' ', $bdate);
-						if (count($bdate)!=2) {
+						$bdate = array(
+							0 => preg_replace("/[^-+0-9]/", "", $bdate),
+							1=> preg_replace("/[0-9-+]/", "", $bdate)
+						);
+						if (empty($bdate[1])) {
 							echo "<b>WARNING:</b> Misconfigured date scope, you have entered invalid -BEGIN- date: Custom offset is invalid e.g. in order to enter five days ago (be careful with space character) use: -5 d (DO NOT FORGET the space between e.g. '-5 d')<br/>";
 							return;
 						} else {
-							$where .= ' AND ( '.$comp.' >= '.$db->Quote(date_time::shift_dates($cdate, $bdate[0], $bdate[1])).' )';
+							$where .= ' AND ( '
+								.$comp.' >= '.$db->Quote(date_time::shift_dates($cdate, $bdate[0], $bdate[1]))
+								.($nulldates ? ' OR '.$comp.' IS NULL OR '.$comp.'="" ' : '')
+							.' )';
 						}
 					}
 				break;
@@ -1445,13 +1553,35 @@ class modFlexicontentHelper
 		// Create JOIN for ordering items by a custom field (Level 1)
 		if ( 'field' == $ordering[1] ) {
 			$orderbycustomfieldid = (int)$params->get('orderbycustomfieldid', 0);
-			$orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f ON f.item_id = i.id AND f.field_id='.$orderbycustomfieldid;
+			$orderbycustomfieldint = (int)$params->get('orderbycustomfieldint', 0);
+			if ($orderbycustomfieldint==4) {
+				$orderby_join .= '
+					LEFT JOIN (
+						SELECT rf.item_id, SUM(fdat.hits) AS file_hits
+						FROM #__flexicontent_fields_item_relations AS rf
+						LEFT JOIN #__flexicontent_files AS fdat ON fdat.id = rf.value
+				 		WHERE rf.field_id='.$orderbycustomfieldid.'
+				 		GROUP BY rf.item_id
+				 	) AS dl ON dl.item_id = i.id';
+			}
+			else $orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f ON f.item_id = i.id AND f.field_id='.$orderbycustomfieldid;
 		}
 		
 		// Create JOIN for ordering items by a custom field (Level 2)
 		if ( 'field' == $ordering[2] ) {
 			$orderbycustomfieldid_2nd = (int)$params->get('orderbycustomfieldid'.'_2nd', 0);
-			$orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f2 ON f2.item_id = i.id AND f2.field_id='.$orderbycustomfieldid_2nd;
+			$orderbycustomfieldint_2nd = (int)$params->get('orderbycustomfieldint'.'_2nd', 0);
+			if ($orderbycustomfieldint_2nd==4) {
+				$orderby_join .= '
+					LEFT JOIN (
+						SELECT f2.item_id, SUM(fdat2.hits) AS file_hits2
+						FROM #__flexicontent_fields_item_relations AS f2
+						LEFT JOIN #__flexicontent_files AS fdat2 ON fdat2.id = f2.value
+				 		WHERE f2.field_id='.$orderbycustomfieldid_2nd.'
+				 		GROUP BY f2.item_id
+				 	) AS dl2 ON dl2.item_id = i.id';
+			}
+			else $orderby_join .= ' LEFT JOIN #__flexicontent_fields_item_relations AS f2 ON f2.item_id = i.id AND f2.field_id='.$orderbycustomfieldid_2nd;
 		}
 		
 		// Create JOIN for ordering items by author's name
@@ -1483,10 +1613,10 @@ class modFlexicontentHelper
 		$add_comments = ($display_comments_feat || $display_comments || in_array('commented', $ordering)) && $jcomments_exist;
 		
 		// Additional select and joins for comments
-		$select_comments     = $add_comments ? ', count(com.object_id) AS comments_total' : '';
+		$select_comments     = $add_comments ? ', COUNT(DISTINCT com.id) AS comments_total' : '';
 		$join_comments_type  = $ordering[1]=='commented' ? ' INNER JOIN' : ' LEFT JOIN';   // Do not require most commented for 2nd level ordering
 		$join_comments       = $add_comments ?
-			$join_comments_type .' #__jcomments AS com ON com.object_id = i.id AND com.object_group="com_flexicontent"' : '' ;
+			$join_comments_type .' #__jcomments AS com ON com.object_id = i.id AND com.object_group="com_flexicontent" AND com.published="1"' : '' ;
 		
 		
 		// **********************************************************
@@ -1544,7 +1674,7 @@ class modFlexicontentHelper
 				{
 					$in_values = array();
 					foreach ($filter_values as $val) $in_values[] = $db->Quote( $val );   // Quote in case they are strings !!
-					$where_field_filters .= ' AND '.$negage_op.' (rel'.$filter_id.'.value IN ('.implode(',', $in_values).') ) ';
+					$where_field_filters .= ' AND '.$negate_op.' (rel'.$filter_id.'.value IN ('.implode(',', $in_values).') ) ';
 				}
 				
 				// Range value filter
@@ -1552,8 +1682,8 @@ class modFlexicontentHelper
 					// Special case only one part of range provided ... must MATCH/INCLUDE empty values or NULL values ...
 					$value_empty = !strlen(@$filter_values[1]) && strlen(@$filter_values[2]) ? ' OR rel'.$filter_id.'.value="" OR rel'.$filter_id.'.value IS NULL ' : '';
 					
-					if ( strlen(@$filter_values[1]) || ( strlen(@$filter_values[2]) ) ) {
-						$where_field_filters .= ' AND '.$negage_op.' ( 1 ';
+					if ( strlen(@$filter_values[1]) || strlen(@$filter_values[2]) ) {
+						$where_field_filters .= ' AND '.$negate_op.' ( 1 ';
 						if ( strlen(@$filter_values[1]) ) $where_field_filters .= ' AND (rel'.$filter_id.'.value >=' . $filter_values[1] . ') ';
 						if ( strlen(@$filter_values[2]) ) $where_field_filters .= ' AND (rel'.$filter_id.'.value <=' . $filter_values[2] . $value_empty . ') ';
 						$where_field_filters .= ' )';
@@ -1618,7 +1748,7 @@ class modFlexicontentHelper
 
 		if ( empty($items_query) ) {  // If a custom query has not been set above then use the default one ...
 			$items_query 	= 'SELECT '
-				.' i.id '
+				. ' i.id '
 				. (in_array('commented', $ordering) ? $select_comments : '')
 				. (in_array('rated', $ordering) ? $select_rated : '')
 				. ' FROM #__flexicontent_items_tmp AS i'
@@ -1644,9 +1774,10 @@ class modFlexicontentHelper
 			$_cl = (!$behaviour_cat && $method_cat == 3) ? 'c' : 'mc';
 			
 			$items_query_data 	= 'SELECT '
-				.' i.*, ie.*, ty.name AS typename'
+				. ' i.*, ie.*, ty.name AS typename'
 				. $select_comments
 				. $select_rated
+				. ', mc.title AS maincat_title, mc.alias AS maincat_alias'   // Main category data
 				. ', CASE WHEN CHAR_LENGTH(i.alias) THEN CONCAT_WS(\':\', i.id, i.alias) ELSE i.id END as slug'
 				. ', CASE WHEN CHAR_LENGTH(c.alias) THEN CONCAT_WS(\':\', '.$_cl.'.id, '.$_cl.'.alias) ELSE '.$_cl.'.id END as categoryslug'
 				. ', GROUP_CONCAT(rel.catid SEPARATOR ",") as itemcats'
@@ -1679,7 +1810,7 @@ class modFlexicontentHelper
 			// Get content list per given category
 			$per_cat_query = str_replace('__CID_WHERE__', $cat_where, $items_query);
 			$db->setQuery($per_cat_query, 0, $count);
-			$content = FLEXI_J16GE ? $db->loadColumn(0) : $db->loadResultArray(0);
+			$content = $db->loadColumn(0);
 			if ($db->getErrorNum())  JFactory::getApplication()->enqueueMessage(__FUNCTION__.'(): SQL QUERY ERROR:<br/>'.nl2br($db->getErrorMsg()),'error');
 			@ $mod_fc_run_times['query_items'] += $modfc_jprof->getmicrotime() - $_microtime;
 			
@@ -1701,6 +1832,9 @@ class modFlexicontentHelper
 			$rows = array();
 			foreach($content as $_id) $rows[] = $_rows[$_id];
 			$cat_items_arr[$catid] = $rows;
+			
+			// Get Original content ids for creating some untranslatable fields that have share data (like shared folders)
+			flexicontent_db::getOriginalContentItemids($cat_items_arr[$catid]);
 		}
 		
 		
@@ -1721,20 +1855,31 @@ class modFlexicontentHelper
 		$option = JRequest::getVar('option');
 		
 		$currcat_custom_display = $params->get('currcat_custom_display', 0);
-		$isflexi_itemview       = ($option == 'com_flexicontent' && $view == FLEXI_ITEMVIEW);
+		$currcat_source = $params->get('currcat_source', 0);  // 0 item view, 1 category view, 2 both
 		
-		if ($currcat_custom_display && $isflexi_itemview) {
-			$id   = JRequest::getInt('id', 0);   // id of current item
-			$cid  = JRequest::getInt('cid', 0);  // current category id of current item
+		$id     = JRequest::getInt('id', 0);   // id of current item
+		$cid    = JRequest::getInt( ($option == 'com_content' ? 'id' : 'cid') );  // current category ID or category ID of current item
+
+		$is_content_ext   = $option == 'com_flexicontent' || $option == 'com_content';
+		$isflexi_itemview = $is_content_ext && ($view == 'item' || $view == 'article') && $id;
+		$isflexi_catview  = $is_content_ext && $view == 'category' && $cid;
+		
+		$currcat_valid_case =
+			($currcat_source==2 && ($isflexi_itemview || $isflexi_catview))
+			|| ($currcat_source==0 && $isflexi_itemview)
+			|| ($currcat_source==1 && $isflexi_catview);
+		if ($currcat_custom_display && $currcat_valid_case)
+		{
 			
 			$catconf = new stdClass();
 			$catconf->orderby = '';
 			$catconf->fallback_maincat  = $params->get('currcat_fallback_maincat', 0);
 			$catconf->showtitle  = $params->get('currcat_showtitle', 0);
 			$catconf->showdescr  = $params->get('currcat_showdescr', 0);
+			$catconf->do_cutdescr= (int)$params->get('currcat_do_cutdescr', 1);
 			$catconf->cuttitle   = (int)$params->get('currcat_cuttitle', 40);
 			$catconf->cutdescr   = (int)$params->get('currcat_cutdescr', 200);
-			$catconf->link_title	= $params->get('currcat_link_title');
+			$catconf->link_title = $params->get('currcat_link_title');
 			
 			$catconf->show_image 		= $params->get('currcat_show_image');
 			$catconf->image_source	= $params->get('currcat_image_source');
@@ -1745,7 +1890,7 @@ class modFlexicontentHelper
 			$catconf->show_default_image = (int)$params->get('currcat_show_default_image', 0);  // parameter not added yet
 			$catconf->readmore	= (int)$params->get('currcat_currcat_readmore', 1);
 			
-			if ($catconf->fallback_maincat && !$cid && $id) {
+			if ($isflexi_itemview && $catconf->fallback_maincat && !$cid && $id) {
 				$query = 'SELECT catid FROM #__content WHERE id = ' . $id;
 				$db->setQuery($query);
 				$cid = $db->loadResult();
@@ -1766,9 +1911,10 @@ class modFlexicontentHelper
 			$catconf->orderby    = $params->get('cats_orderby', 'alpha');
 			$catconf->showtitle  = $params->get('cats_showtitle', 0);
 			$catconf->showdescr  = $params->get('cats_showdescr', 0);
+			$catconf->do_cutdescr= (int)$params->get('cats_do_cutdescr', 1);
 			$catconf->cuttitle   = (int)$params->get('cats_cuttitle', 40);
 			$catconf->cutdescr   = (int)$params->get('cats_cutdescr', 200);
-			$catconf->link_title	= $params->get('cats_link_title');
+			$catconf->link_title = $params->get('cats_link_title');
 			
 			$catconf->show_image 		= $params->get('cats_show_image');
 			$catconf->image_source	= $params->get('cats_image_source');
@@ -1801,10 +1947,9 @@ class modFlexicontentHelper
 		if ($db->getErrorNum())  JFactory::getApplication()->enqueueMessage(__FUNCTION__.'(): SQL QUERY ERROR:<br/>'.nl2br($db->getErrorMsg()),'error');
 		if (!$catdata_arr)  return false;
 		
-		if (!FLEXI_J16GE) jimport( 'joomla.html.parameter' );
 		$joomla_image_path = $app->getCfg('image_path',  FLEXI_J16GE ? '' : 'images'.DS.'stories' );
 		foreach( $catdata_arr as $i => $catdata ) {
-			$catdata->params = FLEXI_J16GE ? new JRegistry($catdata->params) : new JParameter($catdata->params);
+			$catdata->params = new JRegistry($catdata->params);
 			
 			// Category Title
 			$catdata->title = flexicontent_html::striptagsandcut($catdata->title, $catconf->cuttitle);
@@ -1825,7 +1970,7 @@ class modFlexicontentHelper
 					$aoe	= '&amp;aoe=1';
 					$q		= '&amp;q=95';
 					$zc		= $catconf->image_method ? '&amp;zc=' . $catconf->image_method : '';
-					$ext = pathinfo($src, PATHINFO_EXTENSION);
+					$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 					$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
 					$conf	= $w . $h . $aoe . $q . $zc . $f;
 			
@@ -1837,7 +1982,7 @@ class modFlexicontentHelper
 					$aoe	= '&amp;aoe=1';
 					$q		= '&amp;q=95';
 					$zc		= $catconf->image_method ? '&amp;zc=' . $catconf->image_method : '';
-					$ext = pathinfo($src, PATHINFO_EXTENSION);
+					$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 					$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
 					$conf	= $w . $h . $aoe . $q . $zc . $f;
 		
@@ -1851,9 +1996,9 @@ class modFlexicontentHelper
 			// Category Description
 			if (!$catconf->showdescr) {
 				unset($catdata->description);
-			} else {
+			} else if ($catconf->do_cutdescr) {
 				$catdata->description = flexicontent_html::striptagsandcut($catdata->description, $catconf->cutdescr);
-			}
+			} // else do not strip / cut description
 			
 			// Category Links (title and image links)
 			if ($catconf->link_title || $catconf->link_image || $catconf->readmore) {
@@ -1924,14 +2069,14 @@ class modFlexicontentHelper
 		
 		// Get comment ids ordered
 		$query = 'SELECT id FROM #__jcomments AS com '
-			.' WHERE com.object_id IN (' . implode($item_ids, ",") .') AND com.object_group="com_flexicontent" '
+			.' WHERE com.object_id IN (' . implode(',', $item_ids) .') AND com.object_group="com_flexicontent" AND com.published="1"'
 			.' ORDER BY com.object_id, com.date DESC';
 		$db->setQuery($query);
 		$comment_ids = FLEXI_J16GE ? $db->loadColumn(0) : $db->loadResultArray(0);
 		
 		// Get comments data
 		$query = 'SELECT * FROM #__jcomments AS com '
-			.' WHERE com.id IN (' . implode($comment_ids, ",") .')';
+			.' WHERE com.id IN (' . implode(',', $comment_ids) .')';
 		$db->setQuery($query);
 		$_comments = $db->loadObjectList('id');
 		

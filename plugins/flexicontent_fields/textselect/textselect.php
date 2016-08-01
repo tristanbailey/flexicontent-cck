@@ -14,10 +14,9 @@
  */
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-//jimport('joomla.plugin.plugin');
-jimport('joomla.event.plugin');
+jimport('cms.plugin.plugin');
 
-class plgFlexicontent_fieldsTextSelect extends JPlugin
+class plgFlexicontent_fieldsTextselect extends JPlugin
 {
 	static $field_types = array('textselect');
 	static $extra_props = array();
@@ -26,7 +25,7 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	// CONSTRUCTOR
 	// ***********
 	
-	function plgFlexicontent_fieldsTextSelect( &$subject, $params ) {
+	function __construct( &$subject, $params ) {
 		parent::__construct( $subject, $params );
 		JPlugin::loadLanguage('plg_flexicontent_fields_text', JPATH_ADMINISTRATOR);
 		JPlugin::loadLanguage('plg_flexicontent_fields_select', JPATH_ADMINISTRATOR);
@@ -43,7 +42,6 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	
 	// Method to create field's HTML display for item form
 	function onDisplayField(&$field, &$item) {
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		// field_type is not changed text field can handle this field type
@@ -54,7 +52,6 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	// Method to create field's HTML display for frontend views
 	function onDisplayFieldValue(&$field, $item, $values=null, $prop='display')
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		// field_type is not changed text field can handle this field type
@@ -70,7 +67,6 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	// Method to handle field's values before they are saved into the DB
 	function onBeforeSaveField( &$field, &$post, &$file, &$item )
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		// field_type is not changed text field can handle this field type
@@ -80,7 +76,6 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	
 	// Method to take any actions/cleanups needed after field's values are saved into the DB
 	function onAfterSaveField( &$field, &$post, &$file, &$item ) {
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		// field_type is not changed text field can handle this field type
@@ -90,7 +85,6 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	
 	// Method called just before the item is deleted to remove custom item data related to the field
 	function onBeforeDeleteField(&$field, &$item) {
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		
 		// field_type is not changed text field can handle this field type
@@ -108,47 +102,45 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	{
 		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
-		plgFlexicontent_fieldsTextselect::onDisplayFilter($filter, $value, $formName);
+		$this->onDisplayFilter($filter, $value, $formName, $isSearchView=1);
 	}
 	
 	
 	// Method to display a category filter for the category view
-	function onDisplayFilter(&$filter, $value='', $formName='adminForm')
+	function onDisplayFilter(&$filter, $value='', $formName='adminForm', $isSearchView=0)
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
-		// Prepare field as IF it is a select field
+		// Prepare field as IF it is a using custom Query or custom elements
 		plgFlexicontent_fieldsTextselect::_prepareField_as_SelectField($filter);
+		$asSelect = $filter->parameters->get('filter_customize_options') != 0;
 		
-		// Create a select field object
+		// Create a 'select' or 'text' field object and render its filter display
 		$dispatcher = JDispatcher::getInstance();
-		$sel_fld_obj = new plgFlexicontent_fieldsSelect($dispatcher, array());
-		
-		// Get the FILTER's display ... by changing field type to 'select'
-		$filter->field_type = 'select';
-		$sel_fld_obj->onDisplayFilter($filter, $value, $formName);
+		$filter->field_type = $asSelect ? 'select' : 'text';
+		$_fld_obj = $asSelect ? new plgFlexicontent_fieldsSelect($dispatcher, array()) : new plgFlexicontent_fieldsText($dispatcher, array());
+		$_fld_obj->onDisplayFilter($filter, $value, $formName);
 		$filter->field_type = 'textselect';
 	}	
 	
 	
-	// Get item ids having the value(s) of filter
-	function getFiltered(&$filter, $value)
+ 	// Method to get the active filter result (an array of item ids matching field filter, or subquery returning item ids)
+	// This is for content lists e.g. category view, and not for search view
+	function getFiltered(&$filter, $value, $return_sql=true)
 	{
-		// execute the code only if the field type match the plugin type
 		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
-		return FlexicontentFields::getFiltered($filter, $value, $return_sql=true);
+		return FlexicontentFields::getFiltered($filter, $value, $return_sql);
 	}
 	
-		
+	
  	// Method to get the active filter result (an array of item ids matching field filter, or subquery returning item ids)
 	// This is for search view
-	function getFilteredSearch(&$field, $value)
+	function getFilteredSearch(&$filter, $value, $return_sql=true)
 	{
-		if ( !in_array($field->field_type, self::$field_types) ) return;
+		if ( !in_array($filter->field_type, self::$field_types) ) return;
 		
-		return FlexicontentFields::getFilteredSearch($field, $value, $return_sql=true);
+		return FlexicontentFields::getFilteredSearch($filter, $value, $return_sql);
 	}
 	
 	
@@ -158,8 +150,8 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 	// *************************
 	
 	// Method to create (insert) advanced search index DB records for the field values
-	function onIndexAdvSearch(&$field, &$post, &$item) {
-		// execute the code only if the field type match the plugin type
+	function onIndexAdvSearch(&$field, &$post, &$item)
+	{
 		if ( !in_array($field->field_type, self::$field_types) ) return;
 		if ( !$field->isadvsearch && !$field->isadvfilter ) return;
 		
@@ -196,19 +188,6 @@ class plgFlexicontent_fieldsTextSelect extends JPlugin
 				$field->parameters->set($keyname, $field->parameters->get($k));
 			}
 		}
-		
-		if ( !$field->parameters->get('sql_mode_override') ) {
-			// Default is to use all text's field values
-			$query = "SELECT value, value as text FROM #__flexicontent_fields_item_relations as fir WHERE field_id='{field_id}' AND value != '' GROUP BY value";
-		} else {
-			// Custom query for value retrieval
-			$query = $field->parameters->set('sql_mode_query');
-		}
-		$query = str_replace('{field_id}', $field->id, $query);
-		
-		// Set remaining parameters needed for Select Field
-		$field->parameters->set('sql_mode', 1);
-		$field->parameters->set('field_elements', $query);		
 	}
 	
 }

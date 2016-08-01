@@ -19,7 +19,8 @@
 // no direct access
 defined('_JEXEC') or die('Restricted access');
 
-jimport('joomla.application.component.model');
+jimport('legacy.model.legacy');
+use Joomla\String\StringHelper;
 
 /**
  * FLEXIcontent Component Category Model
@@ -48,7 +49,7 @@ class FlexicontentModelItemcompare extends JModelLegacy
 
 		$cid = JRequest::getVar( 'cid', array(0), '', 'array' );
 		JArrayHelper::toInteger($cid, array(0));
-		$version = JRequest::getVar('version', 0, '', 'int');
+		$version = JRequest::getVar( 'version', 0, '', 'int' );
 		$this->setId($cid[0],$version);
 	}
 
@@ -96,7 +97,7 @@ class FlexicontentModelItemcompare extends JModelLegacy
 	{		
 		if ($this->_loadItem())
 		{		
-			if (JString::strlen($this->_item->fulltext) > 1) {
+			if (StringHelper::strlen($this->_item->fulltext) > 1) {
 				$this->_item->text = $this->_item->introtext . "<hr id=\"system-readmore\" />" . $this->_item->fulltext;
 			} else {
 				$this->_item->text = $this->_item->introtext;
@@ -188,10 +189,10 @@ class FlexicontentModelItemcompare extends JModelLegacy
 			$item->created				= $createdate->toUnix();
 			$item->created_by			= null;
 			$item->created_by_alias		= '';
-			$item->modified				= $nullDate;
+			$item->modified				= '';//$nullDate//JText::_( 'FLEXI_NEVER' );
 			$item->modified_by		= null;
 			$item->publish_up 		= $createdate->toUnix();
-			$item->publish_down 	= JText::_( 'FLEXI_NEVER' );
+			$item->publish_down 	= '';//$nullDate//JText::_( 'FLEXI_NEVER' );
 			$item->attribs				= null;
 			$item->access					= 0;
 			$item->metadata				= null;
@@ -223,51 +224,46 @@ class FlexicontentModelItemcompare extends JModelLegacy
 		$tparams = $this->_db->loadResult();
 		return $tparams;
 	}
-
-	/**
-	 * Method to get the values of an extrafield
-	 * 
-	 * @return array
-	 * @since 1.5
-	 */
-	function getExtrafieldvalue($fieldid)
+	
+	
+	function getCustomFieldsValues($item_id=0, $version=0)
 	{
-		if ($fieldid == 1) {
-			$field_value = array();
-			array_push($field_value, $this->_item->text);
-		} else {
-		$query = 'SELECT value'
-				.' FROM #__flexicontent_fields_item_relations AS firel'
-				.' WHERE firel.item_id = ' . (int)$this->_id
-				.' AND firel.field_id = ' . (int)$fieldid
-				.' ORDER BY valueorder'
-				;
+		if (!$item_id)  $item_id = $this->_id;
+		if (!$item_id)  return array();
+		
+		static $field_values;
+		if ( isset($field_values[$item_id][$version] ) )
+			return $field_values[$item_id][$version];
+		
+		$cparams = JComponentHelper::getParams('com_flexicontent');
+		$use_versioning = $cparams->get('use_versioning', 1);
+		
+		$query = 'SELECT field_id, value, valueorder, suborder'
+			.( ($version<=0 || !$use_versioning) ? ' FROM #__flexicontent_fields_item_relations AS fv' : ' FROM #__flexicontent_items_versions AS fv' )
+			.' WHERE fv.item_id = ' . (int)$item_id
+			.( ($version>0 && $use_versioning) ? ' AND fv.version='.((int)$version) : '')
+			.' ORDER BY field_id, valueorder, suborder'
+			;
 		$this->_db->setQuery($query);
-		$field_value = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
+		$rows = $this->_db->loadObjectList();
+		
+		// Add values to cached array
+		$field_values[$item_id][$version] = array();
+		foreach ($rows as $row) {
+			$field_values[$item_id][$version][$row->field_id][$row->valueorder-1][$row->suborder-1] = $row->value;
 		}
-		return $field_value;
+		
+		foreach ($field_values[$item_id][$version] as & $fv) {
+			foreach ($fv as & $ov) {
+				if (count($ov) == 1) $ov = reset($ov);
+			}
+			unset($ov);
+		}
+		unset($fv);
+		
+		return $field_values[$item_id][$version];
 	}
-
-	/**
-	 * Method to get the value of the older version
-	 * 
-	 * @return array
-	 * @since 1.5
-	 */
-	function getExtrafieldVersionvalue($fieldid)
-	{
-		$query = 'SELECT value'
-				.' FROM #__flexicontent_items_versions AS iv'
-				.' WHERE iv.item_id = ' . (int)$this->_id
-				.' AND iv.field_id = ' . (int)$fieldid
-				.' AND iv.version = ' . (int)$this->_version
-				.' ORDER BY valueorder'
-				;
-		$this->_db->setQuery($query);
-		$field_versionvalue = FLEXI_J16GE ? $this->_db->loadColumn() : $this->_db->loadResultArray();
-
-		return $field_versionvalue;
-	}
+	
 	
 	/**
 	 * Method to get extrafields which belongs to the item type
@@ -288,12 +284,16 @@ class FlexicontentModelItemcompare extends JModelLegacy
 				;
 		$this->_db->setQuery($query);
 		$fields = $this->_db->loadObjectList();
-
+		
+		$cus_vals = $this->getCustomFieldsValues($this->_id, 0);
+		$ver_vals = $this->getCustomFieldsValues($this->_id, $this->_version);
+		
 		foreach ($fields as $field) {
 			$field->item_id 	= (int)$this->_id;
-			$field->value 		= $this->getExtrafieldvalue($field->id);
-			$field->version 	= $this->getExtrafieldVersionvalue($field->id);
-			$field->parameters= FLEXI_J16GE ? new JRegistry($field->attribs) : new JParameter($field->attribs);
+			$field->value 		= @ $cus_vals[$field->id];  // ignore not set
+			$field->version 	= @ $ver_vals[$field->id];  // ignore not set
+			$field->parameters= new JRegistry($field->attribs);
+			//$field->parameters->set('use_ingroup', 0);
 		}
 
 		return $fields;

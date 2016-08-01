@@ -1,67 +1,44 @@
-var stateselector = {
-	makeSlider: function(){
-		this.sliders = $$('ul.statetoggler ul').map(function(ul){
-			return new Fx.Slide(ul, {
-				mode: 'vertical'
-			}).hide();
-		});
+var fc_statehandler = function( options )
+{
+	this.options = {
+		id: "",
+		script_url: "index.php?option=com_flexicontent&format=raw",
+		task: "",
+		state: ""
+	};
+	
+	if( typeof options !== 'undefined') for (var key in options)
+	{
+		//console.log(key, options[key]);
+		this.options[key] = options[key];
+	};
 
-		$$('ul.statetoggler a.opener').each(function(lnk, index){
-			lnk.addEvent('click', function(){
-				this.sliders[index].toggle();
-			}.bind(this));
-		}, this);
+	this.setstate = function( state, id ) {
+		var stateurl = this.options.script_url + "&task=" + this.options.task + "&id=" + id + "&state=" + state;
+		jQuery('#row' + id).empty().addClass('ajax-loader');
 		
-		$$('ul.statetoggler .options').each(function(lnk, index){
-			lnk.addEvent('click', function(){
-				this.sliders[index].toggle();
-			}.bind(this));
-		}, this);
-	},
-
-	init: function(){
-		this.makeSlider();
+		jQuery.ajax({
+			url: stateurl,
+			dataType: "html",
+			data: {
+				lang: (typeof _FC_GET !="undefined" && 'lang' in _FC_GET ? _FC_GET['lang']: '')
+			},
+			success: function( data )
+			{
+				jQuery('#row' + id).removeClass('ajax-loader').html(data);
+			},
+			error: function (xhr, ajaxOptions, thrownError) {
+				alert('Error status: ' + xhr.status + ' , Error text: ' + thrownError);
+			}
+		});
 	}
 };
 
-var processstate = new Class(  
-{  
-	options:  {
-		id: "",
-		script_url: "index.php?option=com_flexicontent&format=raw",
-		task: "setitemstate",
-		state: ""
-	},
-
-	initialize: function( name, options ) {  
-		this.setOptions( options );
-		this.name = name;
-	},
-
-	dostate: function( state, id ) {
-		var url = this.options.script_url + "&task=" + this.options.task + "&id=" + id + "&state=" + state;
-		if (MooTools.version>='1.2.4') {
-			new Request.HTML({
-				url: url,
-				method: 'get',
-				evalScripts: false,
-				update: $('row' + id)
-				//,onComplete: hider
-			}).send();
-		} else {
-			var setstate = new Ajax(url, {
-				method: 'get',
-				evalScripts: false,
-				update: 'row' + id
-				//,onComplete: hider
-			});
-			setstate.request();
-		}
-		
-		//function hider(response) {
-		//	alert(response);
-		//}
+function fc_toggleStateSelector(el){
+	if ( jQuery(el).parent().find("ul").is(":hidden") ) {
+		jQuery(el).closest("ul.statetoggler").find(".stateopener").addClass("active");
+	} else {
+		jQuery(el).closest("ul.statetoggler").find(".stateopener").removeClass("active");
 	}
-});
-
-processstate.implement( new Options, new Events );
+	jQuery(el).parent().find("ul").slideToggle(200);
+}

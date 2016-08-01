@@ -19,7 +19,7 @@
 // no direct access
 defined( '_JEXEC' ) or die( 'Restricted access' );
 
-jimport( 'joomla.application.component.view');
+jimport('legacy.view.legacy');
 
 /**
  * HTML View class for the FLEXIcontent View (RSS)
@@ -44,6 +44,7 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 		
 		$doc->link = JRoute::_('index.php?option=com_flexicontent&view=flexicontent&rootcat='. (int)$params->get('rootcat', FLEXI_J16GE ? 1:0));
 		JRequest::setVar('limit', $params->get('feed_limit'));   // Force a specific limit, this will be moved to the model
+		JFactory::getApplication()->input->set('limit', $params->get('feed_limit'));
 		$cats = $this->get('Feed');
 		
 		//$feed_summary = $params->get('feed_summary', 0);
@@ -119,10 +120,11 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 						$w		= '&amp;w=' . $cat_image_width;
 						$aoe	= '&amp;aoe=1';
 						$q		= '&amp;q=95';
+						$ar 	= '&amp;ar=x';
 						$zc		= $cat_image_method ? '&amp;zc=' . $cat_image_method : '';
-						$ext = pathinfo($src, PATHINFO_EXTENSION);
+						$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 						$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-						$conf	= $w . $h . $aoe . $q . $zc . $f;
+						$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 				
 						$thumb = JURI::base(true).'/components/com_flexicontent/librairies/phpthumb/phpThumb.php?src='.$src.$conf;
 					} else if ( $cat_image_source!=1 && $src = flexicontent_html::extractimagesrc($cat) ) {
@@ -131,10 +133,11 @@ class FlexicontentViewFlexicontent extends JViewLegacy
 						$w		= '&amp;w=' . $feed_image_width;
 						$aoe	= '&amp;aoe=1';
 						$q		= '&amp;q=95';
+						$ar 	= '&amp;ar=x';
 						$zc		= $feed_image_method ? '&amp;zc=' . $feed_image_method : '';
-						$ext = pathinfo($src, PATHINFO_EXTENSION);
+						$ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 						$f = in_array( $ext, array('png', 'ico', 'gif') ) ? '&amp;f='.$ext : '';
-						$conf	= $w . $h . $aoe . $q . $zc . $f;
+						$conf	= $w . $h . $aoe . $q . $ar . $zc . $f;
 			
 						$base_url = (!preg_match("#^http|^https|^ftp|^/#i", $src)) ?  JURI::base(true).'/' : '';
 						$src = $base_url.$src;

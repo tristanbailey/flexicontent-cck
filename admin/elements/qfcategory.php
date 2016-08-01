@@ -1,6 +1,6 @@
 <?php
 /**
- * @version 1.5 stable $Id: qfcategory.php 1759 2013-09-09 16:39:47Z ggppdk $
+ * @version 1.5 stable $Id: qfcategory.php
  * @package Joomla
  * @subpackage FLEXIcontent
  * @copyright (C) 2009 Emmanuel Danan - www.vistamedia.fr
@@ -18,10 +18,13 @@
 
 // Check to ensure this file is included in Joomla!
 defined('_JEXEC') or die('Restricted access');
-if (FLEXI_J16GE) {
-	jimport('joomla.html.html');
-	jimport('joomla.form.formfield');
-}
+
+jimport('cms.html.html');      // JHtml
+jimport('cms.html.select');    // JHtmlSelect
+jimport('joomla.form.field');  // JFormField
+
+//jimport('joomla.form.helper'); // JFormHelper
+//JFormHelper::loadFieldClass('...');   // JFormField...
 
 /**
  * Renders an Item element
@@ -33,99 +36,123 @@ if (FLEXI_J16GE) {
 
 class JFormFieldQfcategory extends JFormField
 {
- /**
-	* Element name
-	*
-	* @access	protected
-	* @var		string
-	*/
+	/**
+	 * Element name
+	 *
+	 * @access	protected
+	 * @var		string
+	 */
 	var	$type = 'Qfcategory';
 
 	function getInput()
 	{
-		$doc = JFactory::getDocument();
-		if (FLEXI_J16GE) {
-			$node = & $this->element;
-			$attributes = get_object_vars($node->attributes());
-			$attributes = $attributes['@attributes'];
-		} else {
-			$attributes = & $node->_attributes;
-		}
+		$allowEdit		= ((string) $this->element['edit'] == 'true') ? true : false;
+		$allowClear		= ((string) $this->element['clear'] != 'false') ? true : false;
 		
-		$value = FLEXI_J16GE ? $this->value : $value;
-		if (FLEXI_J16GE) {
-			$paramset = isset($attributes['paramset']) ? $attributes['paramset'] : 'request';
-		}
+		$attributes = get_object_vars($this->element->attributes());
+		$attributes = $attributes['@attributes'];
+		//echo "<pre>"; print_r($attributes); exit;
+		
+		$paramset = isset($attributes['paramset']) ? $attributes['paramset'] : false; // : 'request';
 		$required = isset($attributes['required']) ? $attributes['required'] : false;
 		
-		$fieldname = FLEXI_J16GE ? "jform[".$paramset."][".$this->element["name"]."]" : $control_name.'['.$name.']';
-		$element_id = FLEXI_J16GE ? "jform_".$paramset."_".$node["name"] : "a_id";
-		$prompt_str = JText::_( 'FLEXI_SELECT_ONE_CATEGORY', true );
-
+		$value = $this->value;
+		if ($paramset) {
+			$fieldname = "jform[".$paramset."][".$this->element["name"]."]";
+			$element_id = "jform_".$paramset."_".$this->element["name"];
+		} else {
+			$fieldname  = $this->name;
+			$element_id = $this->id;
+		}
+		
 		JTable::addIncludePath(JPATH_ADMINISTRATOR.DS.'components'.DS.'com_flexicontent'.DS.'tables');
-
+		
 		$item = JTable::getInstance('flexicontent_categories', '');
 		if ($value) {
 			$item->load($value);
-			$title = $item->title;
 		} else {
-			$title = "";
-			$value = "";  // clear possible invalid value
+			$item->title = '';
 		}
 		
-		$required_js = "";
-		$required_param = "";
+		// J1.6+ does have required field capability, add a HTML tag parameter
+		$required_param = $required ? ' required="required" class="required" aria-required="true" ' : '';
 		
-		// J1.5 does not have required, we implement it via custom JS
-		if (!FLEXI_J16GE) {
-			if ( @$attributes['required'] ) {
-				$required_js ="
-					$$('#toolbar-apply a.toolbar').setProperty('onclick',
-						\" if ( $('a_id').getProperty('value') != '' ) { $('urlparams".$attributes["name"]."-lbl').setStyle('color',''); submitbutton('apply'); } else { alert('".$prompt_str."'); $('urlparams".$attributes["name"]."-lbl').setStyle('color','red'); } \"
-					);
-
-					$$('#toolbar-save a.toolbar').setProperty('onclick',
-						\" if ( $('a_id').getProperty('value') != '' ) { $('urlparams".$attributes["name"]."-lbl').setStyle('color',''); submitbutton('save'); } else { alert('".$prompt_str."'); $('urlparams".$attributes["name"]."-lbl').setStyle('color','red'); } \"
-					);
-				";
+		static $js_added = false;
+		if (!$js_added) {
+			$js = "
+			function fcClearSelectedCategory(element_id)
+			{
+				jQuery('#'+element_id+'_name').val('');
+				jQuery('#'+element_id+'_name').attr('placeholder', '".JText::_( 'FLEXI_FORM_SELECT',true )."');
+				jQuery('#'+element_id).val('');
+				jQuery('#'+element_id + '_clear').addClass('hidden');
+				jQuery('#'+element_id + '_edit').addClass('hidden');
+				return false;
+			};
+			
+			var fc_select_cat_element_id;
+			function fcSelectCategory(id, title)
+			{
+				document.getElementById(fc_select_cat_element_id).value = id;
+				document.getElementById(fc_select_cat_element_id+'_name').value = title;"
+			.($allowEdit  ? "
+				jQuery('#'+fc_select_cat_element_id+'_edit').removeClass('hidden');" : '')
+			.($allowClear ? "
+				jQuery('#'+fc_select_cat_element_id+'_clear').removeClass('hidden');" :'')
+			."
+				//$('sbox-btn-close').fireEvent('click');
+				fc_field_dialog_handle_record.dialog('close');
+			}
+			";
+			JFactory::getDocument()->addScriptDeclaration($js);
+			//JHTML::_('behavior.modal', 'a.modal');
+			flexicontent_html::loadFramework('flexi-lib');
+		}
+		
+		$option = JRequest::getVar('option');
+		$view   = JRequest::getVar('view');
+		
+		$assocs_id  = 0;
+		$created_by = @$attributes['created_by'];
+		$language   = @$attributes['language'];
+		
+		if ($language && $option=='com_flexicontent' && $view=='category')
+		{
+			$cid = JRequest::getVar( 'cid', array(0), $hash='default', 'array' );
+			JArrayHelper::toInteger($cid, array(0));
+			$assocs_id = $cid[0];
+			if (!$assocs_id) {
+				$id = JRequest::getVar( 'id', array(0), $hash='default', 'array' );
+				JArrayHelper::toInteger($id, array(0));
+				$assocs_id = $id[0];
 			}
 		}
-		
-		// J1.6+ does have required form capability, add a HTML tag parameter
-		else {
-			$required_param = $required ? ' required="required" class="required" aria-required="true" ' : '';
-		}
-		
-		$js = "
-		window.addEvent( 'domready', function()
-		{
-			$('remove').addEvent('click', function(){
-				$('a_name').setProperty('value', '');
-				$('".$element_id."').setProperty('value', '');
-			});
-			".$required_js."
-		});
-
-		function qfSelectCategory(id, title) {
-			document.getElementById('".$element_id."').value = id;
-			document.getElementById('a_name').value = title;
-			".(!FLEXI_J16GE ?
-				"document.getElementById('sbox-window').close();" :
-				"$('sbox-btn-close').fireEvent('click');"
-			)."
-		}";
-
 		$link = 'index.php?option=com_flexicontent&amp;view=qfcategoryelement&amp;tmpl=component';
-		$doc->addScriptDeclaration($js);
-
-		JHTML::_('behavior.modal', 'a.modal');
-
-		$html = "\n<div style=\"float: left;\"><input style=\"background: #ffffff;\" type=\"text\" id=\"a_name\" value=\"{$title}\" ".$required_param." readonly=\"readonly\" /></div>";
-		$html .= "<div class=\"button2-left\"><div class=\"blank\"><a class=\"modal btn btn-small btn-success\" title=\"".JText::_( 'FLEXI_SELECT' )."\"  href=\"$link\" rel=\"{handler: 'iframe', size: {x: 800, y: 500}}\">".JText::_( 'FLEXI_SELECT' )."</a></div></div>\n";
-		$html .= "\n<input type=\"hidden\" id=\"".$element_id."\" name=\"".$fieldname."\" ".$required_param." value=\"{$value}\" />";
-		$html .= "<div class=\"button2-left\"><div class=\"blank\"><a class=\"btn btn-small btn-danger\" id=\"remove\" title=\"".JText::_( 'FLEXI_REMOVE_VALUE' )."\"  href=\"#\"\">".JText::_( 'FLEXI_REMOVE_VALUE' )."</a></div></div>\n";
-
-		return $html;
+		$link .= $created_by ? '&amp;created_by='.$created_by : '';
+		$link .= $language ? '&amp;language='.$language : '';
+		$link .= ($language && $assocs_id) ? '&amp;assocs_id='.$assocs_id : '';
+		
+		//$rel = '{handler: \'iframe\', size: {x:((window.getSize().x<1100)?window.getSize().x-100:1000), y: window.getSize().y-100}}';
+		$_select = JText::_('FLEXI_SELECT_CATEGORY', true);
+		return '
+		<span class="input-append">
+			<input type="text" id="'.$element_id.'_name" placeholder="'.JText::_( 'FLEXI_FORM_SELECT',true ).'" value="'.$item->title.'" '.$required_param.' readonly="readonly" />
+			'. //<a class="modal btn hasTooltip" onclick="fc_select_cat_element_id=\''.$element_id.'\'" href="'.$link.'" rel="'.$rel.'" title="'.$_select.'">
+			'<a class="btn hasTooltip" onclick="fc_select_cat_element_id=\''.$element_id.'\'; var url = jQuery(this).attr(\'href\'); window.fc_field_dialog_handle_record = fc_showDialog(url, \'fc_modal_popup_container\', 0, 0, 0, 0, {title:\''.$_select.'\'}); return false;" href="'.$link.'" title="'.$_select.'" >
+				'.JText::_( 'FLEXI_FORM_SELECT' ).'
+			</a>
+			'.($allowEdit ? '
+			<a id="' .$element_id. '_edit" class="btn ' . ($value ? '' : ' hidden') . ' hasTooltip" href="index.php?option=com_flexicontent&amp;task=category.edit&amp;cid=' . $value . '" target="_blank" title="'.JText::_( 'FLEXI_EDIT_CATEGORY' ).'">
+				<span class="icon-edit"></span>' . JText::_('FLEXI_FORM_EDIT') . '
+			</a>' : '').'
+			'.($allowClear ? '
+			<button id="' .$element_id. '_clear" class="btn'.($value ? '' : ' hidden').'" onclick="return fcClearSelectedCategory(\''.$element_id . '\')">
+				<span class="icon-remove"></span>
+				'.JText::_('FLEXI_CLEAR').'
+			</button>' : '').'
+		</span>
+		<input type="text" id="'.$element_id.'" name="'.$fieldname.'" value="'.$value.'" class="fc_hidden_value" />
+		';
 	}
 }
 ?>

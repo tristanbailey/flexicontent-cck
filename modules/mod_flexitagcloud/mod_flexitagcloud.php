@@ -6,14 +6,15 @@
  * @copyright (C) 2009 Emmanuel Danan - www.vistamedia.fr
  * @license GNU/GPL v2
  * 
- * FLEXItagcloud module is a tag cloud module module for flexicontent.
+ * Tags Cloud Module for flexicontent.
+ *
  * FLEXIcontent is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
 
-//no direct access
+// no direct access
 defined('_JEXEC') or die('Restricted access');
 
 // Decide whether to show module contents
@@ -41,39 +42,52 @@ if ($params->get('enable_php_rule', 0)) {
 if ( $show_mod )
 {
 	global $modfc_jprof;
-	jimport( 'joomla.error.profiler' );
+	jimport('joomla.profiler.profiler');
 	$modfc_jprof = new JProfiler();
 	$modfc_jprof->mark('START: FLEXIcontent Tags Cloud Module');
-
-	// load english language file for 'mod_flexitagcloud' module then override with current language file
-	JFactory::getLanguage()->load('mod_flexitagcloud', JPATH_SITE, 'en-GB', true);
-	JFactory::getLanguage()->load('mod_flexitagcloud', JPATH_SITE, null, true);
-
+	
+	static $mod_initialized = null;
+	$modulename = 'mod_flexitagcloud';
+	if ($mod_initialized === null)
+	{
+		// Load english language file for current module then override (forcing a reload) with current language file
+		JFactory::getLanguage()->load($modulename, JPATH_SITE, 'en-GB', $force_reload = false, $load_default = true);
+		JFactory::getLanguage()->load($modulename, JPATH_SITE, null, $force_reload = true, $load_default = true);
+		
+		// Load english language file for 'com_flexicontent' and then override with current language file. Do not force a reload for either (not needed)
+		JFactory::getLanguage()->load('com_flexicontent', JPATH_SITE, 'en-GB', $force_reload = false, $load_default = true);
+		JFactory::getLanguage()->load('com_flexicontent', JPATH_SITE, null, $force_reload = false, $load_default = true);
+		$mod_initialized = true;
+	}
+	
 	// initialize various variables
 	$document = JFactory::getDocument();
 	$caching 	= $app->getCfg('caching', 0);
-
+	$flexiparams = JComponentHelper::getParams('com_flexicontent');
+	
 	// include the helper only once
 	require_once (dirname(__FILE__).DS.'helper.php');
 
 	// get module's basic display parameters
-	$add_ccs 				= $params->get('add_ccs', 1);
+	$add_ccs 				= $params->get('add_ccs', !$flexiparams->get('disablecss', 0));
 	$layout 				= $params->get('layout', 'default');
 
 	// Add css
 	if ($add_ccs) {
-		if ($caching && !FLEXI_J16GE) {
-			// Work around for caching bug in J1.5
-			echo '<link rel="stylesheet" href="'.JURI::base(true).'/modules/mod_flexitagcloud/tmpl/mod_flexitagcloud.css">';
-			echo '<link rel="stylesheet" href="'.JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css">';
+		// Work around for extension that capture module's HTML 
+		if ($add_ccs==2) {
+			echo '<link rel="stylesheet" href="'.JURI::base(true).'/modules/'.$modulename.'/tmpl/'.$modulename.'.css?'.FLEXI_VHASH.'">';
+			echo '<link rel="stylesheet" href="'.JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css?'.FLEXI_VHASH.'">';
 			//allow css override
 			if (file_exists(JPATH_SITE.DS.'templates'.DS.$app->getTemplate().DS.'css'.DS.'flexicontent.css')) {
 				echo '<link rel="stylesheet" href="'.JURI::base(true).'/templates/'.$app->getTemplate().'/css/flexicontent.css">';
 			}
-		} else {
-			// Standards compliant implementation for >= J1.6 or earlier versions without caching disabled
-			$document->addStyleSheet(JURI::base(true).'/modules/mod_flexitagcloud/tmpl/mod_flexitagcloud.css');
-			$document->addStyleSheet(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css');
+		}
+		
+		// Standards compliant implementation by placing CSS link into the HTML HEAD
+		else {
+			$document->addStyleSheetVersion(JURI::base(true).'/modules/'.$modulename.'/tmpl/'.$modulename.'.css', FLEXI_VHASH);
+			$document->addStyleSheetVersion(JURI::base(true).'/components/com_flexicontent/assets/css/flexicontent.css', FLEXI_VHASH);
 			//allow css override
 			if (file_exists(JPATH_SITE.DS.'templates'.DS.$app->getTemplate().DS.'css'.DS.'flexicontent.css')) {
 				$document->addStyleSheet(JURI::base(true).'/templates/'.$app->getTemplate().'/css/flexicontent.css');
@@ -88,7 +102,6 @@ if ( $show_mod )
 	require(JModuleHelper::getLayoutPath('mod_flexitagcloud', $layout));
 	
 	// append performance stats to global variable
-	$flexiparams = JComponentHelper::getParams('com_flexicontent');
 	if ( $flexiparams->get('print_logging_info') )
 	{
 		$modfc_jprof->mark('END: FLEXIcontent Tags Cloud Module');

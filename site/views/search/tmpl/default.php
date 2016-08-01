@@ -24,7 +24,7 @@ if ($menu) $page_classes .= ' menuitem'.$menu->id;
 <?php
 if (JRequest::getCmd('print')) {
 	if ($this->params->get('print_behaviour', 'auto') == 'auto') : ?>
-		<script type="text/javascript">window.addEvent('domready', function() { window.print(); });</script>
+		<script type="text/javascript">jQuery(document).ready(function(){ window.print(); });</script>
 	<?php	elseif ($this->params->get('print_behaviour') == 'button') : ?>
 		<input type='button' id='printBtn' name='printBtn' value='<?php echo JText::_('Print');?>' class='btn btn-info' onclick='this.style.display="none"; window.print(); return false;'>
 	<?php endif;
@@ -34,11 +34,11 @@ if (JRequest::getCmd('print')) {
 	$printbutton = flexicontent_html::printbutton( $this->print_link, $this->params );
 	if ($pdfbutton || $mailbutton || $printbutton) {
 	?>
-	<p class="buttons">
+	<div class="buttons">
 		<?php echo $pdfbutton; ?>
 		<?php echo $mailbutton; ?>
 		<?php echo $printbutton; ?>
-	</p>
+	</div>
 	<?php }
 }
 ?>
@@ -46,8 +46,14 @@ if (JRequest::getCmd('print')) {
 
 <?php if (!JRequest::getVar('print',0)) echo $this->loadTemplate('form'); ?>
 <?php
-if(!$this->error && count($this->results) > 0) :
-	echo $this->loadTemplate('results');
+if(!$this->error) :
+	if (!empty($_REQUEST['direct']) && count($this->results) > 0) {
+		header('Location: '.JRoute::_($this->results[0]->href));
+	}
+	
+	else {
+		echo $this->loadTemplate('results');
+	}
 else :
 	echo $this->loadTemplate('error');
 endif;

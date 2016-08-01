@@ -12,19 +12,21 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_favourites` (
   `itemid` int(11) NOT NULL default '0',
   `userid` int(11) NOT NULL default '0',
   `notify` int(11) NOT NULL default '0',
-  PRIMARY KEY  (`id`,`itemid`,`userid`),
+  `type` INT(11) NOT NULL DEFAULT '0',
+  PRIMARY KEY  (`id`,`itemid`,`userid`, `type`),
   KEY `id` (`id`),
   KEY `itemid` (`itemid`),
-  KEY `userid` (`userid`)
+  KEY `userid` (`userid`),
+  KEY `type` (`type`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `#__flexicontent_fields` (
   `id` int(11) unsigned NOT NULL auto_increment,
-  `asset_id` int(11) unsigned NOT NULL,
+  `asset_id` int(11) unsigned NOT NULL default '0',
   `field_type` varchar(50) NOT NULL default '',
   `name` varchar(255) NOT NULL default '',
   `label` varchar(255) NOT NULL,
-  `description` varchar(255) NOT NULL default '',
+  `description` text NOT NULL default '',
   `isfilter` tinyint(1) NOT NULL default '0',
   `isadvfilter` tinyint(1) NOT NULL default '0',
   `iscore` tinyint(1) NOT NULL default '0',
@@ -36,7 +38,7 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_fields` (
   `edithelp` tinyint(1) NOT NULL default '2',
   `positions` text NOT NULL,
   `published` tinyint(1) NOT NULL default '0',
-  `attribs` text NOT NULL,
+  `attribs` mediumtext NOT NULL,
   `checked_out` int(11) unsigned NOT NULL default '0',
   `checked_out_time` datetime NOT NULL default '0000-00-00 00:00:00',
   `access` int(11) unsigned NOT NULL default '1',
@@ -48,8 +50,9 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_fields_item_relations` (
   `field_id` int(11) NOT NULL default '0',
   `item_id` int(11) NOT NULL default '0',
   `valueorder` int(11) NOT NULL default '1',
+  `suborder` int(11) NOT NULL default '1',
   `value` mediumtext NOT NULL,
-  PRIMARY KEY  (`field_id`,`item_id`,`valueorder`),
+  PRIMARY KEY  (`field_id`,`item_id`,`valueorder`,`suborder`),
   KEY `field_id` (`field_id`),
   KEY `item_id` (`item_id`),
   KEY `valueorder` (`valueorder`),
@@ -77,24 +80,20 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_files` (
   `published` tinyint(1) NOT NULL default '1',
   `language` char(7) NOT NULL DEFAULT '*',
   `hits` int(11) unsigned NOT NULL default '0',
+  `size` int(11) unsigned NOT NULL default '0',
   `uploaded` datetime NOT NULL default '0000-00-00 00:00:00',
   `uploaded_by` int(11) unsigned NOT NULL default '0',
   `checked_out` int(11) unsigned NOT NULL default '0',
   `checked_out_time` datetime NOT NULL default '0000-00-00 00:00:00',
   `access` int(11) unsigned NOT NULL default '1',
-  `attribs` text NOT NULL,
+  `attribs` mediumtext NOT NULL,
   PRIMARY KEY  (`id`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `#__flexicontent_items_ext` (
   `item_id` int(11) unsigned NOT NULL,
   `type_id` int(11) unsigned NOT NULL,
-  `language` varchar(11) NOT NULL default '*',
-  `cnt_state` int(11) NOT NULL,
-  `cnt_access` int(11) NOT NULL,
-  `cnt_publish_up` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `cnt_publish_down` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `cnt_created_by` INT NOT NULL DEFAULT '0',
+  `language` varchar(7) NOT NULL default '*',
   `lang_parent_id` int(11) unsigned NOT NULL default 0,
   `sub_items` text NOT NULL,
   `sub_categories` text NOT NULL,
@@ -104,6 +103,38 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_items_ext` (
   FULLTEXT KEY `search_index` (`search_index`),
   KEY `lang_parent_id` (`lang_parent_id`),
   KEY `type_id` (`type_id`)
+) ENGINE=MyISAM;
+
+CREATE TABLE IF NOT EXISTS `#__flexicontent_items_tmp` (
+ `id` int(10) unsigned NOT NULL,
+ `title` varchar(255) NOT NULL,
+ `alias` VARCHAR(400) NOT NULL,
+ `state` tinyint(3) NOT NULL DEFAULT '0',
+ `catid` int(10) unsigned NOT NULL DEFAULT '0',
+ `created` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+ `created_by` int(10) unsigned NOT NULL DEFAULT '0',
+ `modified` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+ `modified_by` int(10) unsigned NOT NULL DEFAULT '0',
+ `publish_up` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+ `publish_down` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+ `version` int(10) unsigned NOT NULL DEFAULT '1',
+ `ordering` int(11) NOT NULL DEFAULT '0',
+ `access` int(10) unsigned NOT NULL DEFAULT '0',
+ `hits` int(10) unsigned NOT NULL DEFAULT '0',
+ `featured` tinyint(3) unsigned NOT NULL DEFAULT '0',
+ `language` varchar(7) NOT NULL DEFAULT '*',
+ `type_id` int(11) NOT NULL DEFAULT '0',
+ `lang_parent_id` int(11) NOT NULL DEFAULT '0',
+ PRIMARY KEY (`id`),
+ KEY `alias` (`alias`),
+ KEY `state` (`state`),
+ KEY `catid` (`catid`),
+ KEY `created_by` (`created_by`),
+ KEY `access` (`access`),
+ KEY `language` (`language`),
+ KEY `featured` (`featured`),
+ KEY `type_id` (`type_id`),
+ KEY `lang_parent_id` (`lang_parent_id`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `#__flexicontent_items_extravote` (
@@ -120,8 +151,9 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_items_versions` (
   `field_id` int(11) NOT NULL default '0',
   `item_id` int(11) NOT NULL default '0',
   `valueorder` int(11) NOT NULL default '1',
+  `suborder` int(11) NOT NULL default '1',
   `value` mediumtext NOT NULL,
-  PRIMARY KEY  (`version`,`field_id`,`item_id`,`valueorder`),
+  PRIMARY KEY  (`version`,`field_id`,`item_id`,`valueorder`,`suborder`),
   KEY `version` (`version`),
   KEY `field_id` (`field_id`),
   KEY `item_id` (`item_id`),
@@ -136,6 +168,7 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_tags` (
   `published` tinyint(1) NOT NULL,
   `checked_out` int(11) unsigned NOT NULL default '0',
   `checked_out_time` datetime NOT NULL default '0000-00-00 00:00:00',
+  KEY `name` (`name`),
   PRIMARY KEY  (`id`)
 ) ENGINE=MyISAM;
 
@@ -149,7 +182,7 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_tags_item_relations` (
 
 CREATE TABLE IF NOT EXISTS `#__flexicontent_types` (
   `id` int(11) NOT NULL auto_increment,
-  `asset_id` int(11) unsigned NOT NULL,
+  `asset_id` int(11) unsigned NOT NULL default '0',
   `name` varchar(255) NOT NULL,
   `alias` varchar(255) NOT NULL,
   `published` tinyint(1) NOT NULL,
@@ -157,7 +190,7 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_types` (
   `checked_out` int(11) unsigned NOT NULL default '0',
   `checked_out_time` datetime NOT NULL default '0000-00-00 00:00:00',
   `access` int(11) unsigned NOT NULL default '1',
-  `attribs` text NOT NULL,
+  `attribs` mediumtext NOT NULL,
   PRIMARY KEY  (`id`)
 ) ENGINE=MyISAM;
 
@@ -175,10 +208,19 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_versions` (
 
 CREATE TABLE IF NOT EXISTS `#__flexicontent_templates` (
   `template` varchar(50) NOT NULL default '',
+  `cfgname` varchar(50) NOT NULL default '',
   `layout` varchar(20) NOT NULL default '',
   `position` varchar(100) NOT NULL default '',
   `fields` text NOT NULL,
-  PRIMARY KEY  (`template`,`layout`,`position`)
+  PRIMARY KEY  (`template`,`cfgname`,`layout`,`position`)
+) ENGINE=MyISAM;
+
+CREATE TABLE IF NOT EXISTS `#__flexicontent_layouts_conf` (
+  `template` varchar(50) NOT NULL default '',
+  `cfgname` varchar(50) NOT NULL default '',
+  `layout` varchar(20) NOT NULL default '',
+  `attribs` TEXT CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
+  PRIMARY KEY  (`template`,`cfgname`,`layout`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `#__flexicontent_advsearch_index` (
@@ -229,32 +271,3 @@ CREATE TABLE IF NOT EXISTS `#__flexicontent_download_coupons` (
   KEY `expire_on` (`expire_on`)
 ) ENGINE=MyISAM;
 
-CREATE TABLE IF NOT EXISTS `#__flexicontent_items_tmp` (
- `id` int(10) unsigned NOT NULL,
- `title` varchar(255) NOT NULL,
- `state` tinyint(3) NOT NULL DEFAULT '0',
- `catid` int(10) unsigned NOT NULL DEFAULT '0',
- `created` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
- `created_by` int(10) unsigned NOT NULL DEFAULT '0',
- `modified` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
- `modified_by` int(10) unsigned NOT NULL DEFAULT '0',
- `publish_up` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
- `publish_down` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
- `version` int(10) unsigned NOT NULL DEFAULT '1',
- `ordering` int(11) NOT NULL DEFAULT '0',
- `access` int(10) unsigned NOT NULL DEFAULT '0',
- `hits` int(10) unsigned NOT NULL DEFAULT '0',
- `featured` tinyint(3) unsigned NOT NULL DEFAULT '0',
- `language` char(7) NOT NULL,
- `type_id` int(11) NOT NULL DEFAULT '0',
- `lang_parent_id` int(11) NOT NULL DEFAULT '0',
- PRIMARY KEY (`id`),
- KEY `state` (`state`),
- KEY `catid` (`catid`),
- KEY `created_by` (`created_by`),
- KEY `access` (`access`),
- KEY `language` (`language`),
- KEY `featured` (`featured`),
- KEY `type_id` (`type_id`),
- KEY `lang_parent_id` (`lang_parent_id`)
-) ENGINE=MyISAM;
